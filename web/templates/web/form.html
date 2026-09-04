@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Hospital Flow Simulation — новая симуляция</title>
+  <style>
+    body { font-family: sans-serif; max-width: 480px; margin: 40px auto; }
+    label { display: block; margin-top: 12px; font-weight: bold; }
+    input, select { width: 100%; padding: 6px; margin-top: 4px; box-sizing: border-box; }
+    button { margin-top: 20px; padding: 8px 16px; }
+    nav a { margin-right: 16px; }
+    .errorlist { color: #b00020; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="{% url 'web:form' %}">Новая симуляция</a>
+    <a href="{% url 'web:list' %}">Список прогонов</a>
+  </nav>
+
+  <h1>Параметры больницы</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Запустить симуляцию</button>
+  </form>
+</body>
+</html>

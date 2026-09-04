@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Прогоны — Hospital Flow Simulation</title>
+  <style>
+    body { font-family: sans-serif; max-width: 1100px; margin: 40px auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f2f2f2; }
+    nav a { margin-right: 16px; }
+    .status-failed { color: #b00020; font-weight: bold; }
+    .status-done { color: #1a7a1a; font-weight: bold; }
+    .status-running, .status-queued { color: #888; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="{% url 'web:form' %}">Новая симуляция</a>
+    <a href="{% url 'web:list' %}">Список прогонов</a>
+  </nav>
+
+  <h1>Прогоны симуляции</h1>
+  <p><small>Расчёт идёт в фоне — статус меняется queued → running → done по мере готовности; обновите страницу, чтобы увидеть актуальный статус.</small></p>
+
+  {% if not runs %}
+  <p>Прогонов пока нет — <a href="{% url 'web:form' %}">запустите первый</a>.</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Создано</th>
+        <th>Врачи</th>
+        <th>Поток, чел/мин</th>
+        <th>Приём, мин</th>
+        <th>Горизонт, мин</th>
+        <th>Стратегия</th>
+        <th>Прогонов</th>
+        <th>Статус</th>
+        <th>Ср. ожидание, мин</th>
+        <th>Макс. ожидание, мин</th>
+        <th>Ср. очередь</th>
+        <th>Загрузка врачей</th>
+        <th>Обслужено</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td>{{ run.created_at }}</td>
+        <td>{{ run.doctors }}</td>
+        <td>{{ run.arrival_rate }}</td>
+        <td>{{ run.service_mean }}</td>
+        <td>{{ run.horizon_min }}</td>
+        <td>{{ run.get_strategy_display }}</td>
+        <td>{{ run.n_runs }}</td>
+        <td class="status-{{ run.status }}">
+          {{ run.get_status_display }}
+          {% if run.status == "failed" %}<br><small>{{ run.error_message }}</small>{% endif %}
+        </td>
+        <td>{% if run.result %}{{ run.result.avg_wait_time|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{% if run.result %}{{ run.result.max_wait_time|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{% if run.result %}{{ run.result.avg_queue_length|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{% if run.result %}{{ run.result.doctor_utilization|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{% if run.result %}{{ run.result.patients_served }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</body>
+</html>
