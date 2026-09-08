@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field, field_validator
 # Разрешённые стратегии обслуживания
 STRATEGIES = ["fifo", "priority", "dynamic"]
 
+FUNCTIONS = {
+    "hospital_sim": "Симуляция очереди больницы",
+}
 
 class PatientInput(BaseModel):
     """Описание одного пациента (для детерминированных тестов)."""

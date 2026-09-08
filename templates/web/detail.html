@@ -1,34 +1,98 @@
 {% extends "base.html" %}
 {% block h1 %}Задача #{{ task.pk }}: {{ task.name }}{% endblock %}
+
 {% block content %}
-<p>Статус: <b class="status-{{ task.status }}">{{ task.get_status_display }}</b> · параметры: <code>{{ task.params }}</code></p>
-{% if task.status == "failed" %}<p class="card">Ошибка: {{ task.error }}</p>{% endif %}
+<p>
+  Статус: <b class="status-{{ task.status }}">{{ task.get_status_display }}</b> 
+  · Параметры: <code>{{ task.params }}</code>
+</p>
+
+{% if task.status == "failed" %}
+  <p class="card" style="color: red;">Ошибка: {{ task.error }}</p>
+{% endif %}
+
 {% if task.status == "done" %}
-<div class="card">
-  <p>∫ = <b>{{ task.result.value|floatformat:6 }}</b> &nbsp; погрешность ≈ {{ task.result.error_estimate|stringformat:".2e" }}
-  &nbsp; метод: {{ task.result.method }}, n = {{ task.result.n }}, {{ task.result.elapsed_sec }} с, ядро {{ task.core_version }}</p>
-  <svg id="plot" width="900" height="300" style="background:#fff;border:1px solid #ddd"></svg>
+<div class="card p-3 mb-4">
+  <h4 class="mb-3">📊 Результаты симуляции больницы</h4>
+  
+  {% if task.result %}
+    <ul class="list-group list-group-flush">
+      <li class="list-group-item bg-transparent">
+        <strong>Среднее время ожидания:</strong> 
+        {{ task.result.average_wait_time }} мин.
+      </li>
+      <li class="list-group-item bg-transparent">
+        <strong>Максимальное время ожидания:</strong> 
+        {{ task.result.max_wait_time }} мин.
+      </li>
+      <li class="list-group-item bg-transparent">
+        <strong>Загрузка врачей:</strong> 
+        {% if task.result.doctor_utilization != None %}
+          {% widthratio task.result.doctor_utilization 1 100 %}%
+        {% else %}
+          —
+        {% endif %}
+      </li>
+      <li class="list-group-item bg-transparent">
+        <strong>Всего обслужено пациентов:</strong> 
+        {{ task.result.served_patients_count }} чел.
+      </li>
+      <li class="list-group-item bg-transparent">
+        <strong>Средняя длина очереди:</strong> 
+        {{ task.result.average_queue_length }} чел.
+      </li>
+    </ul>
+  {% else %}
+    <p class="text-muted">Данные результатов симуляции отсутствуют.</p>
+  {% endif %}
+
+  <div class="mt-3 text-muted">
+    <small>
+      Время расчёта: {{ task.result.elapsed_sec|default:"0.01" }} с | 
+      Версия ядра: {{ task.core_version|default:"1.0.0" }}
+    </small>
+  </div>
 </div>
-<script>
-// Минимальный график без внешних библиотек: работает и в закрытой сети (занятие 8: SSR + немного JS).
-const pts = {{ task.result.points|safe }};
-const svg = document.getElementById('plot'), W = 900, H = 300, pad = 30;
-const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-const xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(0, ...ys), ymax = Math.max(0, ...ys);
-const sx = x => pad + (x - xmin) / (xmax - xmin || 1) * (W - 2 * pad);
-const sy = y => H - pad - (y - ymin) / (ymax - ymin || 1) * (H - 2 * pad);
-const y0 = sy(0);
-let area = `M${sx(xs[0])},${y0} ` + pts.map(p => `L${sx(p[0])},${sy(p[1])}`).join(' ') + ` L${sx(xs[xs.length-1])},${y0} Z`;
-svg.innerHTML = `<path d="${area}" fill="#fbe5d0"/><path d="M${pts.map(p=>sx(p[0])+','+sy(p[1])).join(' L')}" fill="none" stroke="#3a7ca5" stroke-width="2"/>
-<line x1="${pad}" y1="${y0}" x2="${W-pad}" y2="${y0}" stroke="#999"/>`;
-</script>
+
+{% if task.patients.all %}
+<div class="card p-3">
+  <h5 class="mb-3">📋 Журнал пациентов (первые 20)</h5>
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>№ Пациента</th>
+        <th>Приоритет</th>
+        <th>Время прихода (мин)</th>
+        <th>Начало приёма (мин)</th>
+        <th>Время ожидания (мин)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in task.patients.all|slice:":20" %}
+      <tr>
+        <td>#{{ p.patient_number }}</td>
+        <td>{{ p.priority }}</td>
+        <td>{{ p.arrival_time|floatformat:2 }}</td>
+        <td>{{ p.start_service_time|floatformat:2|default:"—" }}</td>
+        <td>{{ p.wait_time|floatformat:2|default:"0.00" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 {% elif task.status == "queued" or task.status == "running" %}
-<p class="card">Расчёт выполняется… <span id="st"></span></p>
+<p class="card">Симуляция выполняется… <span id="st"></span></p>
 <script>
-// Заезд 2: опрос статуса через API, без перезагрузки страницы.
-async function poll(){ const r = await fetch('/api/tasks/{{ task.pk }}'); const j = await r.json();
-  document.getElementById('st').textContent = j.status; if (j.status==='done'||j.status==='failed') location.reload(); else setTimeout(poll, 1500); }
+async function poll(){ 
+  const r = await fetch('/api/tasks/{{ task.pk }}'); 
+  const j = await r.json();
+  document.getElementById('st').textContent = j.status; 
+  if (j.status==='done'||j.status==='failed') location.reload(); 
+  else setTimeout(poll, 1500); 
+}
 poll();
 </script>
 {% endif %}
-{% endblock %}
+{% endblock %} 
