@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block h1 %}Задачи{% endblock %}
+{% block content %}
+<table>
+<tr><th>#</th><th>Название</th><th>Статус</th><th>Создана</th><th>Ядро</th></tr>
+{% for t in tasks %}
+<tr><td><a href="{% url 'task_detail' t.pk %}">{{ t.pk }}</a></td><td>{{ t.name }}</td>
+<td class="status-{{ t.status }}">{{ t.get_status_display }}</td><td>{{ t.created_at|date:"d.m.Y H:i" }}</td><td>{{ t.core_version }}</td></tr>
+{% empty %}<tr><td colspan="5">Пока пусто — <a href="{% url 'task_create' %}">создать задачу</a></td></tr>{% endfor %}
+</table>
+{% endblock %}

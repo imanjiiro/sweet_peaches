@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}Calc Service{% endblock %}</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#1f1f1f}
+  nav a{margin-right:1rem} table{border-collapse:collapse;width:100%} td,th{border-bottom:1px solid #ddd;padding:.4rem;text-align:left}
+  .status-done{color:#2e7d32}.status-failed{color:#c62828}.status-running,.status-queued{color:#d9822b}
+  form p{margin:.4rem 0} input,select{padding:.3rem} button{padding:.4rem 1rem}
+  .card{background:#f3f4f6;border-radius:8px;padding:1rem;margin:1rem 0}
+</style>
+</head>
+<body>
+<nav><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'task_create' %}">Новая задача</a><a href="/api/docs">API</a><a href="/admin/">Админка</a></nav>
+<h1>{% block h1 %}{% endblock %}</h1>
+{% block content %}{% endblock %}
+</body>
+</html>

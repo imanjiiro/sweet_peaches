@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block h1 %}Задача #{{ task.pk }}: {{ task.name }}{% endblock %}
+{% block content %}
+<p>Статус: <b class="status-{{ task.status }}">{{ task.get_status_display }}</b> · параметры: <code>{{ task.params }}</code></p>
+{% if task.status == "failed" %}<p class="card">Ошибка: {{ task.error }}</p>{% endif %}
+{% if task.status == "done" %}
+<div class="card">
+  <p>∫ = <b>{{ task.result.value|floatformat:6 }}</b> &nbsp; погрешность ≈ {{ task.result.error_estimate|stringformat:".2e" }}
+  &nbsp; метод: {{ task.result.method }}, n = {{ task.result.n }}, {{ task.result.elapsed_sec }} с, ядро {{ task.core_version }}</p>
+  <svg id="plot" width="900" height="300" style="background:#fff;border:1px solid #ddd"></svg>
+</div>
+<script>
+// Минимальный график без внешних библиотек: работает и в закрытой сети (занятие 8: SSR + немного JS).
+const pts = {{ task.result.points|safe }};
+const svg = document.getElementById('plot'), W = 900, H = 300, pad = 30;
+const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+const xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(0, ...ys), ymax = Math.max(0, ...ys);
+const sx = x => pad + (x - xmin) / (xmax - xmin || 1) * (W - 2 * pad);
+const sy = y => H - pad - (y - ymin) / (ymax - ymin || 1) * (H - 2 * pad);
+const y0 = sy(0);
+let area = `M${sx(xs[0])},${y0} ` + pts.map(p => `L${sx(p[0])},${sy(p[1])}`).join(' ') + ` L${sx(xs[xs.length-1])},${y0} Z`;
+svg.innerHTML = `<path d="${area}" fill="#fbe5d0"/><path d="M${pts.map(p=>sx(p[0])+','+sy(p[1])).join(' L')}" fill="none" stroke="#3a7ca5" stroke-width="2"/>
+<line x1="${pad}" y1="${y0}" x2="${W-pad}" y2="${y0}" stroke="#999"/>`;
+</script>
+{% elif task.status == "queued" or task.status == "running" %}
+<p class="card">Расчёт выполняется… <span id="st"></span></p>
+<script>
+// Заезд 2: опрос статуса через API, без перезагрузки страницы.
+async function poll(){ const r = await fetch('/api/tasks/{{ task.pk }}'); const j = await r.json();
+  document.getElementById('st').textContent = j.status; if (j.status==='done'||j.status==='failed') location.reload(); else setTimeout(poll, 1500); }
+poll();
+</script>
+{% endif %}
+{% endblock %}

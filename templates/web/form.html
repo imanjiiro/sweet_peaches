@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block h1 %}Новая задача{% endblock %}
+{% block content %}
+<form method="post">{% csrf_token %}
+{{ form.as_p }}
+<button type="submit">Поставить расчёт</button>
+</form>
+<p class="card">Подсказка: n = 5 000 000 считается несколько секунд — почувствуйте, как страница «висит». На заезде 2 это уйдёт в очередь.</p>
+{% endblock %}

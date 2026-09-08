@@ -1,61 +1,40 @@
-# core/tests/test_solver.py — Больница
-# Эталон: 1 врач, 3 пациента приходят в t = 0,
-# приём каждого ровно 5 минут → ждут 0, 5 и 10 минут
-#
-# Ответ известен ДО кода: посчитан на листке за минуту, без единого
-# запуска функции (см. занятие 3, слайд "Эталон: Больница"). Тест
-# фиксирует этот ответ; реализация в core/simulation.py должна его
-# воспроизводить.
+"""
+Тесты ядра на ЭТАЛОНАХ: задачи с известным точным ответом. Без Django, без БД, без HTTP.
+Замените на эталоны своей задачи (аналитическое решение, справочные значения, sympy).
+"""
+import math
 
-from core.simulation import run
+import pytest
 
-BASE = {
-    "doctors": 1,
-    "service_time": 5,
-    "seed": 1,
-    "patients": [
-        (0, "плановый"),
-        (0, "плановый"),
-        (0, "плановый"),
-    ],
-}
+from core import run
+from core.schemas import FUNCTIONS
 
 
-def test_fifo_waits_are_0_5_10():
-    r = run(**{**BASE, "strategy": "fifo"})
-    assert r["waits"] == [0, 5, 10]  # третий ждёт двоих
-    assert r["avg_wait"] == 5
+def test_sin_on_0_pi_equals_2():
+    r = run({"function": "sin", "a": 0, "b": math.pi, "n": 1000})
+    assert abs(r["value"] - 2.0) < 1e-6
 
 
-def test_priority_serves_critical_first():
-    p = [(0, "плановый"), (0, "срочный"), (0, "критический")]
-    r = run(**{**BASE, "patients": p, "strategy": "priority"})
-    assert r["served"] == ["критический", "срочный", "плановый"]
+def test_x2_on_0_1_equals_one_third():
+    r = run({"function": "x2", "a": 0, "b": 1, "n": 100, "method": "trapezoid"})
+    assert abs(r["value"] - 1 / 3) < 1e-4
 
 
-def test_priority_waits_are_0_5_10_by_urgency():
-    # Эталон: критический -> 0, срочный -> 5, плановый -> 10;
-    # среднее ожидание = (0 + 5 + 10) / 3 = 5.
-    p = [(0, "плановый"), (0, "срочный"), (0, "критический")]
-    r = run(**{**BASE, "patients": p, "strategy": "priority"})
-    # waits — в исходном порядке списка patients: плановый, срочный, критический
-    assert r["waits"] == [10, 5, 0]
-    assert r["avg_wait"] == 5
+def test_error_estimate_is_small_and_positive():
+    r = run({"function": "exp", "a": 0, "b": 1, "n": 200})
+    assert 0 <= r["error_estimate"] < 1e-6
 
 
-def test_priority_does_not_preempt_already_started_service():
-    # Плановый пришёл в t=0 и сразу начал обслуживаться (врач был
-    # свободен, критический ещё не пришёл). Критический приходит
-    # только в t=1 — он НЕ может вытеснить уже идущее обслуживание
-    # или "телепортироваться" перед плановым задним числом.
-    p = [(0, "плановый"), (1, "критический")]
-    r = run(doctors=1, service_time=5, patients=p, strategy="priority")
-    assert r["served"] == ["плановый", "критический"]
-    assert r["waits"] == [0, 4]  # плановый: 0; критический: (0+5) - 1 = 4
+def test_unknown_function_is_rejected_before_compute():
+    with pytest.raises(ValueError):
+        run({"function": "__import__('os')", "a": 0, "b": 1})
 
 
-def test_fifo_respects_arrival_order():
-    p = [(0, "плановый"), (1, "плановый"), (2, "плановый")]
-    r = run(doctors=1, service_time=5, patients=p, strategy="fifo")
-    assert r["served"] == ["плановый", "плановый", "плановый"]
-    assert r["waits"] == [0, 4, 8]
+def test_points_are_limited_for_plot():
+    r = run({"function": "cos", "a": 0, "b": 1, "n": 100_000})
+    assert len(r["points"]) <= 202
+
+
+def test_all_functions_run():
+    for fn in FUNCTIONS:
+        run({"function": fn, "a": 0.1, "b": 1, "n": 10})

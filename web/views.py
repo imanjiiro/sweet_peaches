@@ -1,35 +1,24 @@
-"""
-web/views.py
+from django.shortcuts import get_object_or_404, redirect, render
 
-Форма создаёт задачу (SimulationRun) и запускает расчёт В ФОНЕ через
-web/services.execute_run_async — вьюха НЕ содержит логики расчёта (см.
-AGENTS.md, ограничение 2) и не ждёт её завершения: сохранила форму,
-отправила задачу в фоновый поток, сразу же отдала редирект на список
-(galочка 7 "Фон + измерение"). Статус на странице /runs/ меняется
-queued -> running -> done по ходу расчёта — обновите страницу ещё раз,
-чтобы увидеть готовый результат.
-"""
-from django.shortcuts import redirect, render
-
-from .forms import SimulationRunForm
-from .models import SimulationRun
-from .services import execute_run_async
+from web import services
+from web.forms import TaskForm
+from web.models import Task
 
 
-def form_view(request):
-    """Страница '/' — форма запуска новой симуляции."""
-    if request.method == "POST":
-        form = SimulationRunForm(request.POST)
-        if form.is_valid():
-            run = form.save()  # status по умолчанию = "queued" (см. models.py)
-            execute_run_async(run)  # считаем в фоне, не блокируя ответ
-            return redirect("web:list")
-    else:
-        form = SimulationRunForm()
+def task_list(request):
+    tasks = Task.objects.all()[:50]
+    return render(request, "web/list.html", {"tasks": tasks})
+
+
+def task_create(request):
+    form = TaskForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        owner = request.user if request.user.is_authenticated else None
+        task = services.create_task(form.cleaned_data["name"], form.params(), owner=owner)
+        return redirect("task_detail", pk=task.pk)
     return render(request, "web/form.html", {"form": form})
 
 
-def list_view(request):
-    """Страница '/runs/' — список всех созданных прогонов."""
-    runs = SimulationRun.objects.select_related("result").all()
-    return render(request, "web/list.html", {"runs": runs})
+def task_detail(request, pk: int):
+    task = get_object_or_404(Task, pk=pk)
+    return render(request, "web/detail.html", {"task": task})
