@@ -8,9 +8,6 @@ from pydantic import BaseModel, Field, field_validator
 # Разрешённые стратегии обслуживания
 STRATEGIES = ["fifo", "priority", "dynamic"]
 
-FUNCTIONS = {
-    "hospital_sim": "Симуляция очереди больницы",
-}
 
 class PatientInput(BaseModel):
     """Описание одного пациента (для детерминированных тестов)."""
@@ -26,7 +23,7 @@ class SimulationParams(BaseModel):
     arrival_rate: float = Field(default=1.0, gt=0, description="Интенсивность поступления пациентов (чел/мин)")
     service_mean: float = Field(default=5.0, gt=0, description="Среднее время обслуживания (мин)")
     horizon_min: float = Field(default=480.0, gt=0, description="Длина смены в минутах (по умолчанию 8 часов = 480 мин)")
-    n_runs: int = Field(default=1, ge=1, le=1000, description="Количество прогонов для усреднения")
+    n_runs: int = Field(default=15000, ge=1, le=1000, description="Количество прогонов для усреднения")
     strategy: str = Field(default="fifo", description="Стратегия обслуживания: fifo | priority | dynamic")
     seed: Optional[int] = Field(default=None, description="Зерно генератора случайных чисел для воспроизводимости")
     

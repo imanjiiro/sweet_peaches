@@ -7,17 +7,22 @@ from django.utils import timezone
 
 from core import VERSION, run
 from web.models import Task
+import threading
 
 
 def create_task(name: str, params: dict, owner=None) -> Task:
     task = Task.objects.create(name=name, params=params, owner=owner)
+    
     if settings.USE_QUEUE:
-        from web.jobs import enqueue_task  # заезд 2
-
+        from web.jobs import enqueue_task
         enqueue_task(task.pk)
     else:
-        execute_task(task.pk)  # заезд 1: синхронно, прямо в запросе (и это архитектурная проблема — см. занятие 11)
-        task.refresh_from_db()
+        # Запускаем execute_task в отдельном фоновом потоке!
+        # Теперь HTTP-запрос завершится МГНОВЕННО, а расчет продолжится на фоне.
+        thread = threading.Thread(target=execute_task, args=(task.pk,))
+        thread.daemon = True
+        thread.start()
+
     return task
 
 
