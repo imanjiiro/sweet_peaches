@@ -39,10 +39,10 @@ class ErrorOut(Schema):
 
 @api.post("/tasks", response={202: TaskOut, 422: ErrorOut}, summary="Создать задачу (поставить расчёт)")
 def create_task(request, payload: TaskIn):
-    from core.schemas import IntegrateParams  # валидируем ДО создания задачи
+    from core.schemas import SimulationParams  # валидируем ДО создания задачи
 
     try:
-        IntegrateParams.model_validate(payload.params)
+        SimulationParams.model_validate(payload.params)
     except Exception as exc:  # noqa: BLE001
         return Status(422, {"detail": str(exc)})
     owner = request.user if request.user.is_authenticated else None
