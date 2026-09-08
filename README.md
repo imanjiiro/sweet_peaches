@@ -215,51 +215,8 @@ pytest
 
 ## Вклад
 
-Проект разбит на 3 модуля; за каждым закреплён один участник.
-
-### Модуль 1 — Вычислительное ядро (`core/`)
-
-**Ответственная:** Умалатова Айна (fakandar)
-
-| Файл / директория | Что сделано |
+| Участник | Что сделано |
 |---|---|
-| `core/simulation.py` | Алгоритм симуляции: генерация потока пациентов (Пуассон + экспоненциальное обслуживание), стратегии FIFO / Priority / Dynamic (с ageing), усреднение по n_runs |
-| `core/tests/test_solver.py` | Эталонный детерминированный тест ядра |
-| `core/__init__.py` | Инициализация пакета |
-
----
-
-### Модуль 2 — Web-приложение (`web/`)
-
-**Ответственная:** Зузиева Айшат (zuzievwa)
-
-| Файл / директория | Что сделано |
-|---|---|
-| `web/models.py` | Модели `SimulationRun`, `SimulationResult` |
-| `web/forms.py` | Форма создания симуляции |
-| `web/views.py` | HTML-страницы: форма `/`, список прогонов `/runs/` |
-| `web/services.py` | Связующий слой: вызов `core`, сохранение результата, фоновый запуск (`execute_run_async`) |
-| `web/api.py`, `web/schemas.py` | JSON API (Django Ninja): 4 эндпоинта |
-| `web/admin.py` | Регистрация моделей в админке |
-| `web/urls.py` | Маршрутизация web-приложения |
-| `web/templates/web/` | HTML-шаблоны |
-| `web/migrations/` | Миграции БД |
-| `web/tests/test_api.py` | Тесты API (202/422/200) |
-
----
-
-### Модуль 3 — Инфраструктура и документация (`config/`, `docs/`, корневые файлы)
-
-**Ответственная:** Муцалова Иман (imanjiiro)
-
-| Файл / директория | Что сделано |
-|---|---|
-| `config/settings.py` | Настройки Django (INSTALLED_APPS, DATABASES, .env) |
-| `config/urls.py` | Корневая маршрутизация |
-| `config/wsgi.py`, `config/asgi.py` | Точки входа сервера |
-| `docs/ER.md` | ER-диаграмма |
-| `docs/fat_review.md` | Разбор «толстой» функции |
-| `docs/idea.md` | Идея проекта, проверка тремя вопросами |
-| `docs/adr/ADR-001-stack.md` | ADR: выбор стека |
-| `README.md` | Документация проекта |
-| `manage.py`, `requirements.txt`, `.env.example`, `pytest.ini` | Корневые файлы проекта |
+| Умалатова Айна | `core/schemas.py` |
+| Зузиева Айшат | `core/solver.py` |
+| Муцалова Иман | `core/tests/test_solver.py`, `README.md` |
