@@ -217,6 +217,6 @@ pytest
 
 | Участник | Что сделано |
 |---|---|
-| Умалатова Айна | `core/schemas.py` |
-| Зузиева Айшат | `core/solver.py` |
-| Муцалова Иман | `core/tests/test_solver.py`, `README.md` |
+| Умалатова Айна | `core/schemas.py`, `web/services.py`, `web/models.py` |
+| Зузиева Айшат | `core/solver.py`, `web/templates/web/detail.html`, `tests/test_scenario.py` |
+| Муцалова Иман | `core/tests/test_solver.py`, `README.md`, `tests/test_api.py` |
