@@ -25,7 +25,7 @@ class TaskForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-control"}),
     )
     arrival_rate = forms.FloatField(
-        label="Интенсивность прихода (пациентов/час)",
+        label="Интенсивность прихода (пациентов/мин)",
         min_value=0.1,
         initial=10.0,
         widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
