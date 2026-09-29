@@ -38,14 +38,3 @@ class Task(models.Model):
 
     def __str__(self) -> str:
         return f"#{self.pk} {self.name} [{self.status}]"
-
-
-class PatientLog(models.Model):
-    task = models.ForeignKey(
-        Task, on_delete=models.CASCADE, related_name="patients", null=True, blank=True
-    )
-    patient_number = models.IntegerField("Номер пациента")
-    priority = models.IntegerField("Приоритет", default=1)
-    arrival_time = models.FloatField("Время прихода")
-    start_service_time = models.FloatField("Начало приема", null=True, blank=True)
-    wait_time = models.FloatField("Время ожидания", null=True, blank=True)
