@@ -26,9 +26,9 @@ class TaskForm(forms.Form):
     )
     arrival_rate = forms.FloatField(
         label="Интенсивность прихода (пациентов/мин)",
-        min_value=0.1,
-        initial=10.0,
-        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        min_value=0.01,
+        initial=0.15,  # 0.15 пац/мин = ~9 пац/час на 3 врачей (утилизация ~75%)
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     )
     service_mean = forms.FloatField(
         label="Среднее время приема (мин)",
