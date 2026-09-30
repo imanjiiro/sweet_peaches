@@ -4,11 +4,30 @@
 Заменяет заготовку численного интегрирования. Сохраняет контракт run(params) -> dict
 и поддерживает тесты на эталонных задачах (core/tests/).
 """
+import heapq
+import itertools
 import random
 import time
 from core.schemas import SimulationParams, SimulationResult
 
 VERSION = "1.0.0"  # версия ядра для воспроизводимости расчётов
+
+
+def _queue_key(strategy: str, patient: dict) -> tuple:
+    """
+    Ключ сортировки для кучи (heapq достаёт наименьший ключ за log n шагов вместо прохода max() по всей очереди).
+    У всех стратегий ничья решается по времени прихода, затем по порядку поступления — как делал max() по списку.
+    """
+    priority = patient.get("priority", 1)
+    arrival = patient["arrival_time"]
+    if strategy == "priority":
+        return (-priority, arrival)
+    if strategy == "dynamic":
+        # score = приоритет + (t - приход) / 15 = (приоритет - приход / 15) + t / 15.
+        # Слагаемое t / 15 одинаково у всех в очереди, поэтому порядок задаётся в момент прихода
+        # и не меняется со временем: «динамика» на деле статическая (свойство формулы, не ошибка).
+        return (-(priority - arrival / 15.0), arrival)
+    return (arrival,)  # fifo
 
 
 def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> dict:
@@ -23,7 +42,8 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
     doctor_free_times = [0.0] * doctors
     
     wait_times = []
-    queue = []  # Очередь ожидающих пациентов: (patient_dict, queue_enter_time)
+    queue = []  # Куча ожидающих: (ключ стратегии, порядковый номер, пациент)
+    counter = itertools.count()
     
     current_time = 0.0
     patient_idx = 0
@@ -40,7 +60,7 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
 
         # Все пациенты, пришедшие к текущему моменту времени, попадают в очередь
         while patient_idx < total_patients and events[patient_idx]["arrival_time"] <= current_time:
-            queue.append((events[patient_idx], events[patient_idx]["arrival_time"]))
+            heapq.heappush(queue, (*_queue_key(strategy, events[patient_idx]), next(counter), events[patient_idx]))
             patient_idx += 1
 
         # Ищем первого освободившегося врача
@@ -51,31 +71,15 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
             current_time = doctor_available_time
             # Дозаполняем очередь теми, кто успел прийти за время ожидания врача
             while patient_idx < total_patients and events[patient_idx]["arrival_time"] <= current_time:
-                queue.append((events[patient_idx], events[patient_idx]["arrival_time"]))
+                heapq.heappush(queue, (*_queue_key(strategy, events[patient_idx]), next(counter), events[patient_idx]))
                 patient_idx += 1
 
         if not queue:
             continue
 
-        # ВЫБОР ПАЦИЕНТА ИЗ ОЧЕРЕДИ ПО СТРАТЕГИИ
-        if strategy == "fifo":
-            chosen_idx = 0
-        elif strategy == "priority":
-            # Выбираем максимальный приоритет (3 - критический, 2 - срочный, 1 - плановый)
-            chosen_idx = max(range(len(queue)), key=lambda i: queue[i][0].get("priority", 1))
-        elif strategy == "dynamic":
-            # Dynamic: учитывает срочность + старение (ageing: +1 к приоритету за каждые 15 минут ожидания)
-            def score(i):
-                p_dict, arr_t = queue[i]
-                base_p = p_dict.get("priority", 1)
-                wait_t = current_time - arr_t
-                return base_p + (wait_t / 15.0)
-
-            chosen_idx = max(range(len(queue)), key=lambda i: score(i))
-        else:
-            chosen_idx = 0
-
-        patient, arr_time = queue.pop(chosen_idx)
+        # ВЫБОР ПАЦИЕНТА ИЗ ОЧЕРЕДИ ПО СТРАТЕГИИ: достаём лучшего из кучи за log n шагов
+        patient = heapq.heappop(queue)[-1]
+        arr_time = patient["arrival_time"]
         wait_t = max(0.0, current_time - arr_time)
         wait_times.append(wait_t)
 
@@ -97,7 +101,7 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
     return {
         "average_wait_time": round(avg_wait, 2),
         "max_wait_time": round(max_wait, 2),
-        "average_queue_length": round(len(wait_times) / max(1, len(events)), 2),
+        "average_queue_length": round(sum(wait_times) / max_time, 2) if max_time > 0 else 0.0,
         "doctor_utilization": round(min(1.0, doc_utilization), 2),
         "served_patients_count": served_count,
         "wait_times": [round(w, 2) for w in wait_times],
@@ -106,8 +110,9 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
 
 def generate_stochastic_patients(arrival_rate: float, service_mean: float, horizon_min: float, seed: int = None) -> list:
     """Генерация случайного потока пациентов (Пуассоновский процесс приходов + экспоненциальное время обслуживания)."""
-    if seed is not None:
-        random.seed(seed)
+    # Свой генератор на каждый вызов: параллельные задачи не портят друг другу числа,
+    # а тот же seed всегда даёт тот же поток пациентов (глобальный random.seed этого не гарантирует).
+    rng = random.Random(seed)
 
     patients = []
     current_t = 0.0
@@ -115,16 +120,16 @@ def generate_stochastic_patients(arrival_rate: float, service_mean: float, horiz
 
     while current_t < horizon_min:
         # Интервал между приходами (экспоненциальное распределение)
-        inter_arrival = random.expovariate(arrival_rate)
+        inter_arrival = rng.expovariate(arrival_rate)
         current_t += inter_arrival
         if current_t >= horizon_min:
             break
 
         # Время обслуживания (экспоненциальное распределение)
-        serv_time = random.expovariate(1.0 / service_mean)
+        serv_time = rng.expovariate(1.0 / service_mean)
         
         # Распределение приоритетов: 70% плановые (1), 20% срочные (2), 10% критические (3)
-        r = random.random()
+        r = rng.random()
         if r < 0.7:
             priority = 1
         elif r < 0.9:

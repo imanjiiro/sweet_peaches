@@ -4,6 +4,7 @@ REST API на Django Ninja (занятие 8). Документация: /api/do
 """
 from typing import Any
 
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Schema
 from ninja.responses import Status
@@ -37,6 +38,17 @@ class ErrorOut(Schema):
     detail: str
 
 
+def _get_own_task(request, task_id: int) -> Task:
+    """
+    Задача по номеру с проверкой доступа — то же правило, что на странице (web/views.py, task_detail).
+    Чужая задача — 404, а не 403: посторонний не должен знать, что задача с таким номером есть.
+    """
+    task = get_object_or_404(Task, pk=task_id)
+    if task.owner and task.owner != request.user:
+        raise Http404("задача не найдена")
+    return task
+
+
 @api.post("/tasks", response={202: TaskOut, 422: ErrorOut}, summary="Создать задачу (поставить расчёт)")
 def create_task(request, payload: TaskIn):
     from core.schemas import SimulationParams  # валидируем ДО создания задачи
@@ -52,7 +64,11 @@ def create_task(request, payload: TaskIn):
 
 @api.get("/tasks", response=list[TaskOut], summary="Список задач")
 def list_tasks(request, status: str | None = None):
-    qs = Task.objects.all()
+    if request.user.is_authenticated:
+        qs = Task.objects.filter(owner=request.user)
+    else:
+        # Неавторизованному показываем только анонимные задачи (как на странице)
+        qs = Task.objects.filter(owner__isnull=True)
     if status:
         qs = qs.filter(status=status)
     return qs[:100]
@@ -60,12 +76,12 @@ def list_tasks(request, status: str | None = None):
 
 @api.get("/tasks/{task_id}", response=TaskOut, summary="Статус задачи")
 def get_task(request, task_id: int):
-    return get_object_or_404(Task, pk=task_id)
+    return _get_own_task(request, task_id)
 
 
 @api.get("/tasks/{task_id}/result", response={200: ResultOut, 409: ErrorOut}, summary="Результат задачи")
 def get_result(request, task_id: int):
-    task = get_object_or_404(Task, pk=task_id)
+    task = _get_own_task(request, task_id)
     if task.status != Task.Status.DONE:
         return Status(409, {"detail": f"Задача ещё не завершена: статус {task.status}"})
     return Status(200, task)

@@ -1,6 +1,7 @@
 """Тесты API-контракта. Используют тестовую БД Django."""
 
 import pytest
+from django.contrib.auth import get_user_model
 from web.models import Task
 
 
@@ -66,3 +67,49 @@ def test_list_and_status(client):
     assert tasks[0]["status"] in ["done", "running", "created"]
 
     assert client.get("/api/tasks/999").status_code == 404
+
+
+@pytest.fixture
+def task_of_user_a(db):
+    """Готовая задача пользователя A и пользователь B (для проверки доступа)."""
+    User = get_user_model()
+    user_a = User.objects.create_user("user_a", password="pass-a-12345")
+    User.objects.create_user("user_b", password="pass-b-12345")
+    return Task.objects.create(name="задача A", owner=user_a, params={}, status=Task.Status.DONE, result={"x": 1})
+
+
+@pytest.mark.django_db
+def test_other_user_gets_404_for_foreign_task(client, task_of_user_a):
+    """Пользователь B запрашивает задачу пользователя A -> 404 (статус и результат)."""
+    client.login(username="user_b", password="pass-b-12345")
+
+    assert client.get(f"/api/tasks/{task_of_user_a.pk}").status_code == 404
+    assert client.get(f"/api/tasks/{task_of_user_a.pk}/result").status_code == 404
+
+
+@pytest.mark.django_db
+def test_anonymous_gets_404_for_foreign_task(client, task_of_user_a):
+    """Без входа задача пользователя A недоступна через API: 404."""
+    assert client.get(f"/api/tasks/{task_of_user_a.pk}").status_code == 404
+    assert client.get(f"/api/tasks/{task_of_user_a.pk}/result").status_code == 404
+
+
+@pytest.mark.django_db
+def test_owner_sees_own_task(client, task_of_user_a):
+    client.login(username="user_a", password="pass-a-12345")
+
+    assert client.get(f"/api/tasks/{task_of_user_a.pk}").status_code == 200
+    assert client.get(f"/api/tasks/{task_of_user_a.pk}/result").status_code == 200
+
+
+@pytest.mark.django_db
+def test_list_contains_only_own_tasks(client, task_of_user_a):
+    """В списке только свои: у B пусто, у A одна задача, без входа тоже пусто."""
+    client.login(username="user_b", password="pass-b-12345")
+    assert client.get("/api/tasks").json() == []
+
+    client.login(username="user_a", password="pass-a-12345")
+    assert [t["name"] for t in client.get("/api/tasks").json()] == ["задача A"]
+
+    client.logout()
+    assert client.get("/api/tasks").json() == []
