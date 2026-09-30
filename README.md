@@ -189,6 +189,6 @@ pytest -q
 
 | Участник | Вклад в проект |
 | --- | --- |
-| **Умалатова Айна**| База данных и серверная часть: `core/schemas.p`, `core/__init__.py`, `core/__main__.py`, `web/models.py`, `web/migrations/`, `web/services.py`, `web/management/`, `web/apps.py`, `web/__init__.py`, `config/settings.py`, `config/wsgi.py`, `config/__init__.py`, `manage.py`|
+| **Умалатова Айна**| База данных и серверная часть: `core/schemas.py`, `core/__init__.py`, `core/__main__.py`, `web/models.py`, `web/migrations/`, `web/services.py`, `web/management/`, `web/apps.py`, `web/__init__.py`, `config/settings.py`, `config/wsgi.py`, `config/__init__.py`, `manage.py`|
 |**Зузиева Айшат**| Расчёты, API, веб-страницы и архитектура: `core/solver.py`, `api/`, `web/views.py`, `web/forms.py`, `web/admin.py`, `web/urls.py`, `web/views_fat_example.py`, `config/urls.py`, `templates/`, `example_input.json`, `docs/architecture.md`, `docs/fat_review.md`, `docs/adr/`|
 |**Муцалова Иман**| Тесты, CI, Docker и документация: `core/tests/`, `tests/`, `.github/workflows/python-app.yml`, `Dockerfile`, `docker-compose.yml`, `requirements.txt`, `pytest.ini`, `pyproject.toml`, `.gitignore`, `README.md`, `README_STARTER.md`, `AGENTS.md`, `warmup/`, `docs/ER.png`, `web/jobs.py`|
