@@ -17,4 +17,5 @@ urlpatterns = [
     # API
     path("api/tasks/", api.task_list_create_api, name="api_task_list_create"),
     path("api/tasks/<int:pk>/", api.task_detail_api, name="api_task_detail"),
+    path("api/tasks/<int:pk>/result/", api.task_result_api, name="api_task_result"),  
 ]

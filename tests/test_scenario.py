@@ -1,9 +1,18 @@
 """Сценарный тест: пользователь через форму создаёт задачу и видит результат."""
+
 import pytest
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+User = get_user_model()
 
 
 @pytest.mark.django_db
 def test_user_creates_task_via_form_and_sees_result(client):
+    # Создаем и авторизуем пользователя
+    user = User.objects.create_user(username="testuser", password="password123")
+    client.force_login(user)
+
     # Используем минимальные параметры n_runs и horizon_min, чтобы симуляция отрабатывала за миллисекунды
     form_data = {
         "name": "demo",
@@ -15,7 +24,8 @@ def test_user_creates_task_via_form_and_sees_result(client):
         "n_runs": 1,
     }
 
-    r = client.post("/tasks/new/", form_data)
+    url = reverse("task_create")
+    r = client.post(url, form_data)
 
     if r.status_code == 200 and "form" in r.context:
         assert not r.context["form"].errors, f"Ошибки валидации формы: {r.context['form'].errors}"

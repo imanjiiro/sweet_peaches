@@ -1,6 +1,7 @@
 """
 Тесты ядра на ЭТАЛОНАХ: задачи с известным точным ответом. Без Django, без БД, без HTTP.
 """
+import random
 import pytest
 from core.solver import run
 
@@ -30,28 +31,29 @@ def test_reference_hospital_queue_fifo():
     assert result["served_patients_count"] == 3
 
 
-def test_hospital_queue_priority():
+def test_priority_differs_from_fifo():
     """
-    Тест приоритетной очереди (Priority):
-    Пациенты приходят в t=0:
-    - Пациент 1: плановый (priority=1)
-    - Пациент 2: критический (priority=3)
-    Критический должен пройти раньше планового!
+    Эталонный тест с разным временем приёма (Слайды 15 и 76):
+    - Пациент 1: плановый (priority=1), долгий приём (service_time=10.0)
+    - Пациент 2: критический (priority=3), короткий приём (service_time=2.0)
+
+    В FIFO: Пациент 1 (ждет 0), Пациент 2 (ждет 10.0) -> avg = (0 + 10) / 2 = 5.0
+    В Priority: Пациент 2 идет первым (ждет 0), Пациент 1 (ждет 2.0) -> avg = (0 + 2) / 2 = 1.0
     """
-    params = {
-        "doctors": 1,
-        "strategy": "priority",
-        "patients": [
-            {"id": 1, "arrival_time": 0.0, "service_time": 5.0, "priority": 1},
-            {"id": 2, "arrival_time": 0.0, "service_time": 5.0, "priority": 3},
-        ],
-    }
+    patients = [
+        {"id": 1, "arrival_time": 0.0, "service_time": 10.0, "priority": 1},
+        {"id": 2, "arrival_time": 0.0, "service_time": 2.0, "priority": 3},
+    ]
 
-    result = run(params)
+    base_params = {"doctors": 1, "patients": patients}
 
-    # Первый пришедший обслуживается сразу (0.0), а второй (критический) выходит следующим
-    assert result["served_patients_count"] == 2
-    assert result["average_wait_time"] == 2.5
+    # Прогон по FIFO
+    fifo_result = run({**base_params, "strategy": "fifo"})
+    assert fifo_result["average_wait_time"] == 5.0
+
+    # Прогон по Priority
+    prio_result = run({**base_params, "strategy": "priority"})
+    assert prio_result["average_wait_time"] == 1.0
 
 
 def test_invalid_strategy_rejected():
@@ -88,8 +90,6 @@ def test_same_seed_same_result():
 
 def test_global_random_is_not_touched():
     """Ядро не трогает общий random: соседняя задача в другом потоке не сбивает свои числа."""
-    import random
-
     random.seed(123)
     expected = random.random()
 
