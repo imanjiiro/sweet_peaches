@@ -17,7 +17,7 @@
     {% csrf_token %}
     <button type="submit">Выйти</button>
   </form>
-  <a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'task_create' %}">Новая задача</a><a href="/api/docs">API</a><a href="/admin/">Админка</a></nav>
+  <a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'task_create' %}">Новая задача</a><a href="{% url 'api_task_list_create' %}">API</a><a href="/admin/">Админка</a></nav>
 <h1>{% block h1 %}{% endblock %}</h1>
 {% block content %}{% endblock %}
 </body>
