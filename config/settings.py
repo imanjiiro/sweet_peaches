@@ -3,7 +3,11 @@
 Секреты в код не кладём. См. .env.example.
 """
 import os
+import sys
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,9 +21,18 @@ if _env_file.exists():
             _k, _v = _line.split("=", 1)
             os.environ.setdefault(_k.strip(), _v.strip())
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-insecure-key-change-me")
-DEBUG = os.environ.get("DEBUG", "1") == "1"
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# Безопасно по умолчанию: отладка выключена, ключа в коде нет. Удобство для разработки — в .env на своей машине
+# (скопируйте .env.example в .env: там DEBUG=1 и учебный ключ). На сервере DEBUG не включаем.
+DEBUG = os.environ.get("DEBUG", "0") == "1"
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    if DEBUG or "pytest" in sys.modules:
+        # Разработка и тесты: случайный ключ на время работы процесса (сессии сбросятся при перезапуске)
+        SECRET_KEY = get_random_secret_key()
+    else:
+        raise ImproperlyConfigured("Не задан SECRET_KEY. Скопируйте .env.example в .env и заполните его.")
 
 # Флаг заезда 2: выполнять расчёт в очереди (RQ + Redis) или синхронно прямо в запросе.
 USE_QUEUE = os.environ.get("USE_QUEUE", "0") == "1"

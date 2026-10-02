@@ -1,7 +1,10 @@
 import time
+
 import pytest
+
 from web.models import Task
 from web.services import create_task
+
 
 @pytest.mark.django_db(transaction=True)
 def test_async_thread_execution():

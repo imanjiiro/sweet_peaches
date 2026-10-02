@@ -8,6 +8,7 @@ import heapq
 import itertools
 import random
 import time
+
 from core.schemas import SimulationParams, SimulationResult
 
 VERSION = "1.0.0"  # версия ядра для воспроизводимости расчётов
@@ -108,7 +109,9 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
     }
 
 
-def generate_stochastic_patients(arrival_rate: float, service_mean: float, horizon_min: float, seed: int = None) -> list:
+def generate_stochastic_patients(
+    arrival_rate: float, service_mean: float, horizon_min: float, seed: int | None = None
+) -> list:
     """Генерация случайного потока пациентов (Пуассоновский процесс приходов + экспоненциальное время обслуживания)."""
     # Свой генератор на каждый вызов: параллельные задачи не портят друг другу числа,
     # а тот же seed всегда даёт тот же поток пациентов (глобальный random.seed этого не гарантирует).
@@ -188,7 +191,9 @@ def run(params: dict) -> dict:
             res_dict = {
                 "average_wait_time": round(sum(r["average_wait_time"] for r in runs_results) / len(runs_results), 2),
                 "max_wait_time": round(max(r["max_wait_time"] for r in runs_results), 2),
-                "average_queue_length": round(sum(r["average_queue_length"] for r in runs_results) / len(runs_results), 2),
+                "average_queue_length": round(
+                    sum(r["average_queue_length"] for r in runs_results) / len(runs_results), 2
+                ),
                 "doctor_utilization": round(sum(r["doctor_utilization"] for r in runs_results) / len(runs_results), 2),
                 "served_patients_count": int(sum(r["served_patients_count"] for r in runs_results) / len(runs_results)),
                 "wait_times": runs_results[0]["wait_times"],  # Задержки первого прогона для наглядности

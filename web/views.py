@@ -1,18 +1,16 @@
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
-from django.core.exceptions import PermissionDenied
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 
 from web import services
 from web.forms import TaskForm
-from web.models import Task
 
 
 @login_required
 def task_list(request):
-    # Каждая учетка видит только свои задачи
-    tasks = Task.objects.filter(owner=request.user)[:50]
+    # Каждая учётка видит только свои задачи (одно правило со страницей и API: web/services.py)
+    tasks = services.list_tasks(request.user)[:50]
     return render(request, "web/list.html", {"tasks": tasks})
 
 
@@ -31,12 +29,8 @@ def task_create(request):
 
 @login_required
 def task_detail(request, pk: int):
-    task = get_object_or_404(Task, pk=pk)
-    
-    # Проверка прав: суперпользователь или владелец задачи
-    if task.owner and task.owner != request.user and not request.user.is_superuser:
-        raise PermissionDenied("У вас нет доступа к этой задаче.")
-        
+    # Ищем по номеру И владельцу: чужая задача -> 404, то же правило, что в API (api/api.py, ADR-004)
+    task = services.get_task(request.user, pk)
     return render(request, "web/detail.html", {"task": task})
 
 

@@ -12,3 +12,13 @@ db.sqlite3
 
 # macOS system files
 .DS_Store
+
+# Логи
+*.log
+
+# Загруженные/сгенерированные файлы результатов
+media/
+
+# Кэш инструментов
+.pytest_cache/
+.ruff_cache/

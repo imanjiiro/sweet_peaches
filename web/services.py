@@ -4,15 +4,31 @@ Views и API не вызывают core напрямую и не меняют с
 """
 import sys
 import threading
+
 from django.conf import settings
 from django.db import connections, transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from core import VERSION, run
 from web.models import Task
 
 
+def get_task(user, task_id: int) -> Task:
+    """
+    Задача по номеру И владельцу: одно место для страницы и для API (ADR-004).
+    Чужая задача — 404 (Http404), а не 403: посторонний не должен знать, что задача с таким номером есть.
+    """
+    return get_object_or_404(Task, pk=task_id, owner=user)
+
+
+def list_tasks(user):
+    """Только свои задачи: чужих в списке нет вообще."""
+    return Task.objects.filter(owner=user)
+
+
 def create_task(name: str, params: dict, owner=None, async_exec: bool | None = None) -> Task:
+    """Создаёт задачу сразу с владельцем (owner=user: кто нажал «Считать») и запускает расчёт."""
     task = Task.objects.create(name=name, params=params, owner=owner)
 
     # Определяем, нужен ли синхронный запуск в тестах по умолчанию, 

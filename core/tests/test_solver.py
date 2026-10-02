@@ -2,7 +2,10 @@
 Тесты ядра на ЭТАЛОНАХ: задачи с известным точным ответом. Без Django, без БД, без HTTP.
 """
 import random
+
 import pytest
+
+from core.schemas import MAX_ARRIVAL_RATE, MAX_HORIZON_MIN, MAX_SERVICE_MEAN, SimulationParams
 from core.solver import run
 
 
@@ -66,14 +69,15 @@ def test_average_queue_length_matches_queueing_theory():
     """
     Эталон: теория очередей M/M/1. Приход 0.1 пациента в минуту, приём в среднем 5 минут, один врач:
     загрузка rho = 0.1 * 5 = 0.5, средняя длина очереди Lq = rho^2 / (1 - rho) = 0.25 / 0.5 = 0.5 человека.
-    Результат случайный, поэтому проверяем диапазон; смена длинная (5000 мин), чтобы стартовая пустая очередь не искажала среднее.
+    Результат случайный, поэтому проверяем диапазон; смена самая длинная из допустимых (1440 мин, граница входа),
+    а прогонов много, чтобы стартовая пустая очередь не искажала среднее.
     """
     result = run({
         "doctors": 1,
         "strategy": "fifo",
         "arrival_rate": 0.1,
         "service_mean": 5.0,
-        "horizon_min": 5000,
+        "horizon_min": 1440,
         "n_runs": 200,
         "seed": 1,
     })
@@ -111,3 +115,30 @@ def test_priority_heap_order():
 
     # порядок приёма: 1, 3, 4, 2 -> ожидание 0, 10-2, 15-3, 20-1
     assert result["wait_times"] == [0.0, 8.0, 12.0, 19.0]
+
+
+@pytest.mark.parametrize(
+    "field, too_big",
+    [
+        ("arrival_rate", MAX_ARRIVAL_RATE + 1),
+        ("service_mean", MAX_SERVICE_MEAN + 1),
+        ("horizon_min", MAX_HORIZON_MIN + 1),
+        ("horizon_min", 48000),  # смена 48 000 минут (случай из задания пары 12)
+    ],
+)
+def test_input_above_limit_rejected_before_calculation(field, too_big):
+    """Граница «не больше» проверяется ДО расчёта: слишком большое значение -> ошибка, расчёт не начинается."""
+    with pytest.raises(ValueError):
+        run({"doctors": 1, "strategy": "fifo", field: too_big})
+
+
+def test_input_at_limit_is_accepted():
+    """Само граничное значение допустимо («не больше», а не «меньше»)."""
+    p = SimulationParams.model_validate(
+        {
+            "arrival_rate": MAX_ARRIVAL_RATE,
+            "service_mean": MAX_SERVICE_MEAN,
+            "horizon_min": MAX_HORIZON_MIN,
+        }
+    )
+    assert p.horizon_min == 1440.0

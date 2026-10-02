@@ -1,5 +1,6 @@
 # Заезд 2 (занятие 16). Всё приложение одной командой: docker compose up --build
 # Для заезда 1 можно поднимать только redis: docker compose up redis
+# Перед запуском создайте файл .env рядом с этим файлом и задайте SECRET_KEY (см. .env.example): без него compose не стартует.
 services:
   db:
     image: postgres:16
@@ -19,8 +20,8 @@ services:
       DATABASE_URL: postgres://calc:calc@db:5432/calc
       REDIS_URL: redis://redis:6379/0
       USE_QUEUE: "1"
-      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-key}
-      ALLOWED_HOSTS: "*"
+      SECRET_KEY: ${SECRET_KEY:?задайте SECRET_KEY в файле .env рядом с docker-compose.yml}
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
     ports: ["8000:8000"]
     volumes: ["media:/app/media"]
     depends_on: [db, redis]
@@ -30,7 +31,7 @@ services:
     environment:
       DATABASE_URL: postgres://calc:calc@db:5432/calc
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-key}
+      SECRET_KEY: ${SECRET_KEY:?задайте SECRET_KEY в файле .env рядом с docker-compose.yml}
     volumes: ["media:/app/media"]
     depends_on: [db, redis]
 volumes:
