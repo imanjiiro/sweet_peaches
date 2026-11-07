@@ -2,11 +2,19 @@
 Контракт ядра: что принимаем на вход, что отдаём на выход.
 Валидация входа — ДО запуска расчёта: плохие данные не должны доходить до алгоритма симуляции.
 """
-from typing import Literal, Optional
+
 from pydantic import BaseModel, Field, field_validator
 
 # Разрешённые стратегии обслуживания
 STRATEGIES = ["fifo", "priority", "dynamic"]
+
+# Границы входа («не больше»): один запрос не должен занимать сервер надолго.
+# Проверяются ДО расчёта; форма (web/forms.py) берёт те же числа отсюда.
+MAX_DOCTORS = 20
+MAX_ARRIVAL_RATE = 10.0  # не больше 10 пациентов в минуту
+MAX_SERVICE_MEAN = 240.0  # приём в среднем не дольше 4 часов (в минутах)
+MAX_HORIZON_MIN = 1440.0  # смена не длиннее суток (в минутах)
+MAX_PATIENTS = 5000  # в готовом списке не больше 5000 пациентов (30 000 строк раньше принимались)
 
 
 class PatientInput(BaseModel):
@@ -19,16 +27,22 @@ class PatientInput(BaseModel):
 
 class SimulationParams(BaseModel):
     """Параметры запуска симуляции больницы."""
-    doctors: int = Field(default=1, ge=1, le=20, description="Количество врачей/кабинетов")
-    arrival_rate: float = Field(default=1.0, gt=0, description="Интенсивность поступления пациентов (чел/мин)")
-    service_mean: float = Field(default=5.0, gt=0, description="Среднее время обслуживания (мин)")
-    horizon_min: float = Field(default=480.0, gt=0, description="Длина смены в минутах (по умолчанию 8 часов = 480 мин)")
+    doctors: int = Field(default=1, ge=1, le=MAX_DOCTORS, description="Количество врачей/кабинетов")
+    arrival_rate: float = Field(
+        default=1.0, gt=0, le=MAX_ARRIVAL_RATE, description="Интенсивность поступления пациентов (чел/мин)"
+    )
+    service_mean: float = Field(default=5.0, gt=0, le=MAX_SERVICE_MEAN, description="Среднее время обслуживания (мин)")
+    horizon_min: float = Field(
+        default=480.0, gt=0, le=MAX_HORIZON_MIN, description="Длина смены в минутах (по умолчанию 8 часов = 480 мин)"
+    )
     n_runs: int = Field(default=500, ge=1, le=1000, description="Количество прогонов для усреднения")
     strategy: str = Field(default="fifo", description="Стратегия обслуживания: fifo | priority | dynamic")
-    seed: Optional[int] = Field(default=None, description="Зерно генератора случайных чисел для воспроизводимости")
+    seed: int | None = Field(default=None, description="Зерно генератора случайных чисел для воспроизводимости")
     
     # Для детерминированных тестов (если передаем готовый список пациентов)
-    patients: Optional[list[PatientInput]] = Field(default=None, description="Фиксированный список пациентов (опционально)")
+    patients: list[PatientInput] | None = Field(
+        default=None, max_length=MAX_PATIENTS, description="Фиксированный список пациентов (опционально)"
+    )
 
     @field_validator("strategy")
     @classmethod
@@ -39,6 +53,14 @@ class SimulationParams(BaseModel):
         return v_clean
 
 
+class PriorityWait(BaseModel):
+    """Ожидание пациентов одной срочности: по ней видно, чем стратегии отличаются."""
+    priority: int = Field(description="Срочность: 1 - плановый, 2 - срочный, 3 - критический")
+    count: int = Field(description="Сколько пациентов этой срочности обслужено (в среднем за прогон)")
+    average_wait_time: float = Field(description="Среднее ожидание, мин")
+    max_wait_time: float = Field(description="Максимальное ожидание, мин")
+
+
 class SimulationResult(BaseModel):
     """Результаты выполнения симуляции."""
     average_wait_time: float = Field(description="Среднее время ожидания пациентов (в минутах)")
@@ -46,5 +68,8 @@ class SimulationResult(BaseModel):
     average_queue_length: float = Field(description="Средняя длина очереди")
     doctor_utilization: float = Field(description="Процент/коэффициент загрузки врачей (0.0 - 1.0)")
     served_patients_count: int = Field(description="Количество обслуженных пациентов")
+    wait_by_priority: list[PriorityWait] = Field(
+        default=[], description="Среднее и максимальное ожидание отдельно для срочности 1, 2 и 3"
+    )
     wait_times: list[float] = Field(default=[], description="Список задержек для каждого пациента")
     core_version: str = Field(default="1.0.0", description="Версия алгоритма ядра")

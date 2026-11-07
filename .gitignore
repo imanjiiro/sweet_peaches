@@ -5,6 +5,7 @@ __pycache__/
 
 # Local database
 db.sqlite3
+test_db.sqlite3
 
 # Environment & VirtualEnv
 .venv/
@@ -12,3 +13,16 @@ db.sqlite3
 
 # macOS system files
 .DS_Store
+
+# Логи
+*.log
+
+# Загруженные/сгенерированные файлы результатов
+media/
+
+# Кэш инструментов
+.pytest_cache/
+.ruff_cache/
+
+# Собранная статика (collectstatic)
+staticfiles/

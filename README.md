@@ -22,7 +22,7 @@
 
 Вычислительное ядро (`core/solver.py`) не зависит от Django. Оно умеет два режима: детерминированный (готовый список пациентов, для эталонных тестов) и случайный (поток пациентов с экспоненциальным временем приёма).
 
-Расчёт запускается с веб-формы `/` или через API (`POST /api/tasks`) и выполняется **в фоне** через `threading.Thread`, не блокируя веб-сервер. Вместо потоков можно включить очередь RQ + Redis флагом `USE_QUEUE=1`.
+Расчёт запускается с веб-формы `/tasks/create/` или через API (`POST /api/tasks`); вход обязателен (`/login/`, регистрация — `/signup/`), каждый пользователь видит только свои задачи и выполняется **в фоне** через `threading.Thread`, не блокируя веб-сервер. Вместо потоков можно включить очередь RQ + Redis флагом `USE_QUEUE=1`.
 
 ---
 
@@ -30,11 +30,13 @@
 
 **Эталон 1 (FIFO).** 1 врач, 3 пациента в момент `t = 0` (приём по 5 мин). Ожидание: `[0.0, 5.0, 10.0]`, среднее `5.0` мин, обслужено `3`. Ручной расчёт: `(0 + 5 + 10) / 3 = 5.0`.
 
-**Эталон 2 (теория очередей M/M/1).** 1 врач, 0.1 пациента в минуту, приём в среднем 5 минут, смена 5000 минут, 200 прогонов. Загрузка `ρ = 0.1 · 5 = 0.5`, средняя длина очереди `Lq = ρ² / (1 − ρ) = 0.5` человека. Тест проверяет диапазон `0.4 … 0.6` (результат случайный).
+**Эталон 2 (теория очередей M/M/1).** 1 врач, 0.1 пациента в минуту, приём в среднем 5 минут, смена 1440 минут (самая длинная допустимая), 200 прогонов. Загрузка `ρ = 0.1 · 5 = 0.5`, средняя длина очереди `Lq = ρ² / (1 − ρ) = 0.5` человека. Тест проверяет диапазон `0.4 … 0.6` (результат случайный).
 
 **Средняя длина очереди** считается как сумма времён ожидания всех пациентов (человеко-минуты), делённая на длину смены `max_time`: получаем, сколько человек в среднем стояло в очереди. Это не доля принятых пациентов (так было раньше, и поле всегда равнялось 1.0).
 
-Тесты ядра: `core/tests/test_solver.py`. Тесты API и фоновой работы: `tests/`.
+**Эталон 3 (`dynamic` и `priority` дают разный порядок).** 1 врач; пациент 1 (приход 0, приём 40 мин) занимает врача; пациент 2 приходит в 1 (срочность 1), пациент 3 в 20 (срочность 2), приём по 5 мин. В момент 40 `priority` берёт пациента 3: ожидания `[0, 20, 44]`; `dynamic` считает `срочность − приход / 15`: у пациента 2 это 0,93, у пациента 3 — 0,67, берёт пациента 2: ожидания `[0, 39, 25]`.
+
+Тесты ядра: `core/tests/test_solver.py`, `core/tests/test_cli.py`. Тесты API и фоновой работы: `tests/`.
 
 ---
 
@@ -60,7 +62,7 @@
 | dynamic | 10 | 4 745 | 2.93 | 0.02 |
 | dynamic | 40 | 19 170 | 42.46 | 0.07 |
 
-**Вывод.** На малом входе (1 пац/мин) разницы не видно. На входе ×4 время у `priority` и `dynamic` росло примерно в 20 раз — рост близок к квадрату, потому что `max()` для каждого пациента проходил всю очередь: `n` пациентов × очередь длины `n` = `n²`. Куча достаёт лучшего за `log n` шагов, всего `n · log n`; порядок приёма при этом не изменился (результаты совпадают со старым кодом на всех проверенных потоках и стратегиях).
+**Вывод.** (Поток 40 пац/мин в замере выше текущей границы входа — не больше 10 пац/мин; замер показывает поведение алгоритма при перегрузке.) На малом входе (1 пац/мин) разницы не видно. На входе ×4 время у `priority` и `dynamic` росло примерно в 20 раз — рост близок к квадрату, потому что `max()` для каждого пациента проходил всю очередь: `n` пациентов × очередь длины `n` = `n²`. Куча достаёт лучшего за `log n` шагов, всего `n · log n`; порядок приёма при этом не изменился (результаты совпадают со старым кодом на всех проверенных потоках и стратегиях).
 
 **Про стратегию dynamic.** Счёт `приоритет + (t − приход) / 15` равен `(приоритет − приход / 15) + t / 15`. Слагаемое `t / 15` одинаково у всех в очереди, поэтому порядок пациентов задаётся в момент прихода и не меняется со временем. «Динамическая» стратегия со старением на деле статическая. Это свойство формулы, а не ошибка; по-настоящему динамической она станет, если вес ожидания будет зависеть от приоритета.
 
@@ -68,15 +70,19 @@
 
 ## Входные данные и параметры
 
+**Результат расчёта.** Кроме общих среднего, максимума, длины очереди и загрузки врачей, ядро отдаёт `wait_by_priority`: среднее и максимальное ожидание отдельно для срочности 1 (плановые), 2 (срочные), 3 (критические). Общее среднее почти не зависит от стратегии, разница видна именно по срочности: `priority` и `dynamic` сокращают ожидание критических за счёт плановых. На странице задачи это таблица «Ожидание по срочности».
+
 **Параметры веб-формы (`TaskForm`):**
 
 * Количество врачей (`doctors`: от 1 до 20, по умолчанию `3`);
-* Интенсивность прихода (`arrival_rate`: пац/мин, по умолчанию `0.15`);
-* Среднее время приёма (`service_mean`: мин, по умолчанию `15.0`);
-* Длительность смены (`horizon_min`: мин, по умолчанию `480.0` — 8 часов);
+* Интенсивность прихода (`arrival_rate`: пац/мин, не больше 10, по умолчанию `0.15`);
+* Среднее время приёма (`service_mean`: мин, не больше 240, по умолчанию `15.0`);
+* Длительность смены (`horizon_min`: мин, не больше 1440 — сутки, по умолчанию `480.0` — 8 часов);
 * Стратегия очереди (`strategy`: `fifo`, `priority`, `dynamic`).
 
-Через API и ядро доступны также `n_runs` (число прогонов, 1–1000, по умолчанию 500), `seed` и готовый список `patients`. Значения по умолчанию в схеме ядра (`core/schemas.py`) другие: `arrival_rate = 1.0`, `service_mean = 5.0`, `doctors = 1`.
+**Границы входа.** Числа «не больше» проверяются в ядре (`core/schemas.py`) ДО расчёта; веб-форма берёт те же значения оттуда. Нарушение — ответ 422 (API) или ошибка поля (форма), расчёт не начинается.
+
+Через API и ядро доступны также `n_runs` (число прогонов, 1–1000, по умолчанию 500), `seed` и готовый список `patients` (не больше 5000 пациентов). Значения по умолчанию в схеме ядра (`core/schemas.py`) другие: `arrival_rate = 1.0`, `service_mean = 5.0`, `doctors = 1`.
 
 ---
 
@@ -86,7 +92,7 @@
 
 Статус задачи в режиме потоков: `created → running → done / failed`. Статус `queued` появляется только в режиме очереди RQ (`USE_QUEUE=1`, `web/jobs.py`).
 
-Каждый фоновый поток закрывает соединения с БД через `connections.close_all()`. Страница задачи (`templates/web/detail.html`) опрашивает `/api/tasks/{id}` раз в 1,5 секунды.
+Каждый фоновый поток закрывает свои соединения с БД через `connections.close_all()` (`_execute_in_thread`). Несколько задач одновременно в SQLite работают благодаря настройке `"OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 20}` в `config/settings.py` (иначе — «database is locked»). Страница задачи (`templates/web/detail.html`) опрашивает `/api/tasks/{id}` раз в 1,5 секунды.
 
 **Перезапуск.** Потоки `daemon=True` обрываются вместе с процессом: задача в статусе `running` навсегда остаётся «считается». Подробнее — `docs/adr/002-async-threads.md`.
 
@@ -102,52 +108,71 @@ core/                   — вычислительное ядро (без зав
   schemas.py            — Pydantic-схемы входа и выхода
   tests/                — тесты ядра (эталоны, M/M/1, seed, порядок кучи)
 api/
-  api.py                — REST API на Django Ninja, доступ только к своим задачам
+  api.py                — REST API на Django Ninja (Swagger: /api/docs), вход обязателен, доступ только к своим задачам
 web/                    — Django-приложение
   models.py             — модель Task
-  forms.py              — форма TaskForm
-  views.py              — HTML-представления
-  services.py           — create_task / execute_task, фоновые потоки
+  forms.py              — форма TaskForm (границы входа — из core/schemas.py)
+  views.py              — HTML-представления: список, создание, страница задачи, регистрация
+  urls.py               — адреса страниц, /login/, /logout/, /signup/
+  services.py           — get_task / list_tasks («только свои»), create_task / execute_task, фоновые потоки
   jobs.py               — очередь RQ (режим USE_QUEUE=1)
   admin.py, urls.py, migrations/, management/commands/rqworker.py
-templates/              — base.html, web/list.html, web/form.html, web/detail.html
-tests/                  — тесты API, фонового запуска и сценария
+static/css/style.css    — единый файл стилей для всех страниц
+templates/              — base.html, _form_fields.html, registration/ (вход, регистрация), web/list.html, web/form.html, web/detail.html
+tests/                  — тесты API, доступа к страницам, фонового запуска и сценария
 warmup/                 — учебная разминка (запускается отдельно: pytest warmup)
 docs/
-  architecture.md       — архитектурный документ (12 разделов)
+  architecture.md       — архитектурный документ (12 разделов, автор под каждым)
+  api.md                — адреса API, коды ответа, границы параметров
+  security_review.md    — проверка безопасности
   ER.png                — ER-диаграмма (User 0..1 — ∞ Task)
   fat_review.md         — разбор «толстой» функции
-  adr/                  — 000-template, 001-stack, 002-async-threads, 003-storage-json
+  adr/                  — 000-template, 001-stack, 002-async-threads, 003-storage-json, 004-foreign-task-404
 .github/workflows/python-app.yml — CI (pytest)
-Dockerfile, docker-compose.yml   — запуск в Docker (web, worker, db, redis)
-AGENTS.md, README_STARTER.md, example_input.json, pytest.ini, pyproject.toml, requirements.txt
+Dockerfile, docker-compose.yml   — запуск в Docker (web, worker, db, redis); нужен SECRET_KEY в .env
+.env.example, .dockerignore      — пример настроек окружения; что не попадает в образ
+example_input.json      — пример входа ядра для нашей задачи (python -m core example_input.json)
+AGENTS.md, README_STARTER.md, pytest.ini, pyproject.toml, requirements.txt
 ```
 
 ---
 
 ## REST API
 
-Swagger: `/api/docs`.
+Swagger: `/api/docs`. Подробно: [`docs/api.md`](docs/api.md). Вход обязателен: без входа любой адрес отвечает 401.
 
 | Метод | Путь | Коды | Описание |
 | --- | --- | --- | --- |
-| `POST` | `/api/tasks` | 202 / 422 | Создать задачу и запустить расчёт; плохие параметры — 422 |
-| `GET` | `/api/tasks` | 200 | Список **своих** задач; без входа — только анонимные |
-| `GET` | `/api/tasks/{id}` | 200 / 404 | Статус задачи |
-| `GET` | `/api/tasks/{id}/result` | 200 / 404 / 409 | Результат; ещё не готов — 409 |
+| `POST` | `/api/tasks` | 202 / 401 / 403 / 422 | Создать задачу и запустить расчёт; плохие параметры — 422; вошёл, но без CSRF-токена — 403 |
+| `GET` | `/api/tasks` | 200 / 401 | Список **своих** задач |
+| `GET` | `/api/tasks/{id}` | 200 / 401 / 404 | Статус задачи |
+| `GET` | `/api/tasks/{id}/result` | 200 / 401 / 404 / 409 | Результат; ещё не готов — 409 |
 
-**Доступ.** Чужая задача (и статус, и результат) — **404, а не 403**: посторонний не должен знать, что задача с таким номером есть. На странице (`/tasks/<pk>/`) для чужой задачи остаётся 403.
+**Доступ.** Одно правило везде: чужая задача — **404, а не 403**, и в API, и на странице (`/tasks/<pk>/`): посторонний не должен знать, что задача с таким номером есть (ADR-004). Поиск идёт по номеру И владельцу (`web/services.py`: `get_task`, `list_tasks`). Без входа страницы перенаправляют на `/login/`.
 
 ---
 
 ## Быстрый запуск
 
 1. **Установка:**
+
+macOS / Linux:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 ```
+
+Windows (PowerShell):
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+Файл `.env` нужен: без него нет `SECRET_KEY` и проект не стартует (в `.env.example` для своей машины уже стоят `DEBUG=1` и учебный ключ; на сервере `DEBUG` не включаем).
 
 2. **Миграции и сервер:**
 ```bash
@@ -155,15 +180,23 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+Зарегистрируйтесь на `/signup/` (или создайте администратора: `python manage.py createsuperuser`).
+
 3. **Тесты:**
 ```bash
 pytest -q
 ```
 
+4. **Ядро из командной строки:**
+```bash
+python -m core --help
+python -m core example_input.json
+```
+
 * Веб-интерфейс: http://127.0.0.1:8000/
 * Документация API: http://127.0.0.1:8000/api/docs
 
-**Очередь RQ и Docker:** `docker compose up --build` поднимает web, worker, PostgreSQL и Redis (`USE_QUEUE=1`).
+**Очередь RQ и Docker:** задайте `SECRET_KEY` в файле `.env` рядом с `docker-compose.yml`, затем `docker compose up --build` — поднимает web, worker, PostgreSQL и Redis (`USE_QUEUE=1`). Сайт: http://localhost:8000/.
 
 ---
 
@@ -174,6 +207,9 @@ pytest -q
 * [`docs/adr/001-stack.md`](docs/adr/001-stack.md) — ADR-001: стек (Django + Django Ninja).
 * [`docs/adr/002-async-threads.md`](docs/adr/002-async-threads.md) — ADR-002: фоновые потоки `threading.Thread`.
 * [`docs/adr/003-storage-json.md`](docs/adr/003-storage-json.md) — ADR-003: хранение результатов в `JSONField`.
+* [`docs/adr/004-foreign-task-404.md`](docs/adr/004-foreign-task-404.md) — ADR-004: чужая задача — 404 и на странице, и в API.
+* [`docs/api.md`](docs/api.md) — адреса API, коды ответа, границы параметров.
+* [`docs/security_review.md`](docs/security_review.md) — проверка безопасности.
 * [`docs/fat_review.md`](docs/fat_review.md) — разбор «толстой» функции.
 
 ---
@@ -185,10 +221,15 @@ pytest -q
 * Муцалова Иман (imanjiiro)
 
 
+
+
+
 ### Вклад участников
 
-| Участник | Вклад в проект |
-| --- | --- |
-| **Умалатова Айна**| База данных и серверная часть: `core/schemas.py`, `core/__init__.py`, `core/__main__.py`, `web/models.py`, `web/migrations/`, `web/services.py`, `web/management/`, `web/apps.py`, `web/__init__.py`, `config/settings.py`, `config/wsgi.py`, `config/__init__.py`, `manage.py`|
-|**Зузиева Айшат**| Расчёты, API, веб-страницы и архитектура: `core/solver.py`, `api/`, `web/views.py`, `web/forms.py`, `web/admin.py`, `web/urls.py`, `web/views_fat_example.py`, `config/urls.py`, `templates/`, `example_input.json`, `docs/architecture.md`, `docs/fat_review.md`, `docs/adr/`|
-|**Муцалова Иман**| Тесты, CI, Docker и документация: `core/tests/`, `tests/`, `.github/workflows/python-app.yml`, `Dockerfile`, `docker-compose.yml`, `requirements.txt`, `pytest.ini`, `pyproject.toml`, `.gitignore`, `README.md`, `README_STARTER.md`, `AGENTS.md`, `warmup/`, `docs/ER.png`, `web/jobs.py`|
+| Участник | Что делал | Файлы | 
+| --- | --- | --- | --- |
+| **Умалатова Айна** | База данных, серверная часть и внешний вид. Последние доработки: настройка SQLite против «database is locked» (IMMEDIATE, timeout: 20), закрытие соединения с БД в фоновом потоке, потолок на список пациентов (max_length), схема «ожидание по срочности», раздача стилей через WhiteNoise (зависимость в requirements.txt), единый файл стилей для всех страниц. | `core/schemas.py`, `core/__init__.py`, `web/models.py`, `web/migrations/`, `web/services.py`, `web/management/`, `web/apps.py`, `web/__init__.py`, `config/settings.py`, `config/wsgi.py`, `config/__init__.py`, `manage.py`, `static/css/style.css`, `docs/adr/004-foreign-task-404.md` |
+
+| **Зузиева Айшат** | Расчёты, API, веб-страницы и архитектура. Последние доработки: среднее и максимальное ожидание отдельно для срочности 1/2/3, example_input.json для нашей задачи, таблицы параметров и результата с округлением и русскими подписями, русские названия стратегий и выровненная форма, переписанный ADR-001, обновлённые docs/api.md, docs/architecture.md и ADR-002. | `core/solver.py`, `example_input.json`, `api/`, `web/views.py`, `web/forms.py`, `web/admin.py`, `web/urls.py`, `web/views_fat_example.py`, `config/urls.py`, `templates/web/`, `templates/base.html`, `templates/_form_fields.html`, `docs/architecture.md`, `docs/fat_review.md`, `docs/api.md`, `docs/adr/` | 
+
+|**Муцалова Иман** | Тесты, CI, Docker и документация. Последние доработки: справка python -m core --help, эталонный тест на трёх пациентах (dynamic и priority дают разный порядок), тест «ожидание по срочности», тест «3 задачи подряд в фоне — все done», тесты справки и примера входа, тест «30 000 пациентов → 422», сценарный тест с проверкой результата на странице, русские страницы входа и регистрации, обновлённый .gitignore, этот раздел «Вклад». | `core/__main__.py`, `core/tests/`, `tests/`, `templates/registration/`, `.github/workflows/python-app.yml`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `.gitignore`, `requirements.txt`, `pytest.ini`, `pyproject.toml`, `README.md`, `README_STARTER.md`, `AGENTS.md`, `warmup/`, `docs/ER.png`, `docs/security_review.md`, `web/jobs.py` | 

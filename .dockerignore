@@ -1,0 +1,11 @@
+# Секреты и лишнее не попадают в образ
+.env
+.git
+.github
+.venv
+__pycache__/
+*.pyc
+db.sqlite3
+media/
+.pytest_cache/
+.ruff_cache/

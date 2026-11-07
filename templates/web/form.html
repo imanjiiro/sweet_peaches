@@ -1,9 +1,9 @@
 {% extends "base.html" %}
+{% block title %}Новая задача — очередь в приёмном отделении{% endblock %}
 {% block h1 %}Новая задача{% endblock %}
 {% block content %}
-<form method="post">{% csrf_token %}
-{{ form.as_p }}
-<button type="submit">Поставить расчёт</button>
-</form>
-<p class="card">Подсказка: n = 5 000 000 считается несколько секунд — почувствуйте, как страница «висит». На заезде 2 это уйдёт в очередь.</p>
+<div class="card" style="max-width:560px"><form method="post" class="form">{% csrf_token %}
+  {% include "_form_fields.html" %}
+  <button type="submit">Поставить расчёт</button>
+</form></div>
 {% endblock %}

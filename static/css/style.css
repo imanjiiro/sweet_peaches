@@ -1,0 +1,192 @@
+/* Один общий файл стилей для всех страниц (подключается в templates/base.html).
+   Зелёная палитра: оливковая шапка, сочный зелёный заголовок, тёмные кнопки, кремовый фон. */
+:root {
+  --bg: #f2f5e8;
+  --card: #ffffff;
+  --text: #1d2a17;
+  --muted: #5f6f55;
+  --line: #e0e8d0;
+  --accent: #5d9b14;
+  --accent-dark: #3f7410;
+  --accent-soft: #e6f2cf;
+  --dark: #1d2b14;
+  --ok: #2f8f4e;
+  --ok-soft: #dff3e5;
+  --bad: #c0392b;
+  --bad-soft: #fbe9e7;
+  --wait: #a86a00;
+  --wait-soft: #fdf1d0;
+  --p1: #4f86e8;  /* плановые */
+  --p2: #f0a021;  /* срочные */
+  --p3: #e0524a;  /* критические */
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(40, 70, 20, .08), 0 8px 24px rgba(40, 70, 20, .07);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+a { color: var(--accent-dark); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Шапка: оливковая полоса */
+.topbar { background: #5f8f1f; box-shadow: 0 2px 8px rgba(40, 70, 20, .25); }
+.topbar-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: .85rem 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1.75rem;
+}
+.brand { font-weight: 800; font-size: 1.1rem; color: #fff; letter-spacing: .01em; }
+.brand::before { content: "✚"; margin-right: .5rem; color: #d5f08a; }
+nav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1.4rem; flex: 1; }
+nav a { color: rgba(255, 255, 255, .92); font-weight: 500; padding: .25rem 0; border-bottom: 2px solid transparent; }
+nav a:hover { color: #fff; border-bottom-color: #d5f08a; text-decoration: none; }
+nav form { margin: 0 0 0 auto; }
+
+/* Крупный заголовок страницы на зелёной «сцене» */
+.hero {
+  background: radial-gradient(circle at 85% 20%, #8cc63f 0, rgba(140, 198, 63, 0) 45%),
+              linear-gradient(135deg, #4f8a12, #6aa81d);
+  color: #fff;
+  border-bottom-left-radius: 36px;
+  border-bottom-right-radius: 36px;
+}
+.hero-inner { max-width: 980px; margin: 0 auto; padding: 2rem 1.25rem 2.6rem; }
+.hero h1 { margin: 0; color: #fff; font-size: 2.1rem; font-weight: 800; line-height: 1.15; letter-spacing: -.02em; text-shadow: 0 2px 8px rgba(30, 60, 10, .25); }
+
+main { max-width: 980px; margin: 0 auto; padding: 1.75rem 1.25rem 3rem; }
+
+/* Карточки и таблицы */
+.card, .panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.4rem;
+  margin: 0 0 1.25rem;
+}
+.panel { padding: .25rem 0 0; overflow: hidden; }
+
+table { border-collapse: collapse; width: 100%; background: var(--card); }
+.panel table { margin: 0; }
+caption {
+  text-align: left;
+  font-weight: 600;
+  font-size: 1.02rem;
+  padding: .9rem 1.4rem .5rem;
+}
+th, td { padding: .7rem 1.4rem; text-align: left; border-top: 1px solid var(--line); }
+thead th {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  background: #f1f6e4;
+  font-weight: 600;
+}
+tbody th { font-weight: 500; color: var(--muted); width: 55%; }
+tbody tr:hover td, tbody tr:hover th { background: #f8fbf1; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.params th { width: 55%; }
+
+/* Бейджи статусов */
+.badge {
+  display: inline-block;
+  padding: .1rem .65rem;
+  border-radius: 999px;
+  font-size: .85rem;
+  font-weight: 600;
+}
+.status-done { color: var(--ok); }
+.status-failed { color: var(--bad); }
+.status-running, .status-queued, .status-created { color: var(--wait); }
+.badge.status-done { background: var(--ok-soft); }
+.badge.status-failed { background: var(--bad-soft); }
+.badge.status-running, .badge.status-queued, .badge.status-created { background: var(--wait-soft); }
+
+/* Срочность: цветная точка перед названием */
+.prio::before {
+  content: "";
+  display: inline-block;
+  width: .7rem;
+  height: .7rem;
+  border-radius: 50%;
+  margin-right: .55rem;
+}
+.prio-1::before { background: var(--p1); }
+.prio-2::before { background: var(--p2); }
+.prio-3::before { background: var(--p3); }
+
+/* Главные цифры результата */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .9rem; margin-bottom: 1.25rem; }
+.stat {
+  border-top: 4px solid var(--accent);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: .9rem 1.1rem;
+}
+.stat .label { color: var(--muted); font-size: .85rem; }
+.stat .value { font-size: 1.9rem; font-weight: 800; color: var(--accent-dark); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.stat .unit { font-size: .9rem; font-weight: 500; color: var(--muted); margin-left: .2rem; }
+
+.error { color: var(--bad); }
+.card.error { background: var(--bad-soft); border-color: #f3c9c4; }
+.hint { color: var(--muted); font-size: .9rem; }
+
+/* Формы: подпись над полем, все поля одной ширины */
+.form { max-width: 480px; }
+.card .form { max-width: none; }
+.field { margin-bottom: 1.1rem; }
+.field label { display: block; font-weight: 600; font-size: .92rem; margin-bottom: .3rem; }
+.field input, .field select {
+  width: 100%;
+  padding: .6rem .75rem;
+  border: 1px solid #c9d8b4;
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+  color: var(--text);
+}
+.field input:focus, .field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.field .errorlist { margin: .3rem 0 0; padding: 0; list-style: none; color: var(--bad); font-size: .9rem; }
+.field .helptext { display: block; color: var(--muted); font-size: .85rem; margin-top: .25rem; }
+
+/* Кнопки: тёмные, как на референсе; при наведении зеленеют */
+button {
+  padding: .7rem 1.6rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--dark);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+button:hover { background: var(--accent); }
+button:active { transform: translateY(1px); }
+nav button { background: transparent; color: rgba(255, 255, 255, .85); padding: .25rem 0; font-weight: 500; }
+nav button:hover { background: transparent; color: #fff; text-decoration: underline; }
+
+@media (max-width: 600px) {
+  th, td, caption { padding-left: .9rem; padding-right: .9rem; }
+  .hero h1 { font-size: 1.6rem; }
+}

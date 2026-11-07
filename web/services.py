@@ -4,15 +4,31 @@ Views и API не вызывают core напрямую и не меняют с
 """
 import sys
 import threading
+
 from django.conf import settings
 from django.db import connections, transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from core import VERSION, run
 from web.models import Task
 
 
+def get_task(user, task_id: int) -> Task:
+    """
+    Задача по номеру И владельцу: одно место для страницы и для API (ADR-004).
+    Чужая задача — 404 (Http404), а не 403: посторонний не должен знать, что задача с таким номером есть.
+    """
+    return get_object_or_404(Task, pk=task_id, owner=user)
+
+
+def list_tasks(user):
+    """Только свои задачи: чужих в списке нет вообще."""
+    return Task.objects.filter(owner=user)
+
+
 def create_task(name: str, params: dict, owner=None, async_exec: bool | None = None) -> Task:
+    """Создаёт задачу сразу с владельцем (owner=user: кто нажал «Считать») и запускает расчёт."""
     task = Task.objects.create(name=name, params=params, owner=owner)
 
     # Определяем, нужен ли синхронный запуск в тестах по умолчанию, 
@@ -31,7 +47,7 @@ def create_task(name: str, params: dict, owner=None, async_exec: bool | None = N
             async_exec = not is_testing
 
         if async_exec:
-            thread = threading.Thread(target=execute_task, args=(task.pk,))
+            thread = threading.Thread(target=_execute_in_thread, args=(task.pk,))
             thread.daemon = True
             thread.start()
         else:
@@ -40,9 +56,16 @@ def create_task(name: str, params: dict, owner=None, async_exec: bool | None = N
     return task
 
 
+def _execute_in_thread(task_id: int) -> None:
+    """Обёртка для фонового потока: у потока своё соединение с БД, после расчёта его надо закрыть."""
+    try:
+        execute_task(task_id)
+    finally:
+        connections.close_all()
+
+
 def execute_task(task_id: int) -> None:
-    """Выполняет расчёт. Вызывается синхронно или в фоновом потоке threading.Thread."""
-    connections.close_all()
+    """Выполняет расчёт. Вызывается синхронно, из очереди RQ или (через _execute_in_thread) из потока."""
     task = None
     try:
         with transaction.atomic():
@@ -71,5 +94,3 @@ def execute_task(task_id: int) -> None:
                 task.status = Task.Status.FAILED
                 task.finished_at = timezone.now()
                 task.save()
-    finally:
-        connections.close_all()

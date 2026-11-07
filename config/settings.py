@@ -3,7 +3,11 @@
 Секреты в код не кладём. См. .env.example.
 """
 import os
+import sys
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,9 +21,18 @@ if _env_file.exists():
             _k, _v = _line.split("=", 1)
             os.environ.setdefault(_k.strip(), _v.strip())
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-insecure-key-change-me")
-DEBUG = os.environ.get("DEBUG", "1") == "1"
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# Безопасно по умолчанию: отладка выключена, ключа в коде нет. Удобство для разработки — в .env на своей машине
+# (скопируйте .env.example в .env: там DEBUG=1 и учебный ключ). На сервере DEBUG не включаем.
+DEBUG = os.environ.get("DEBUG", "0") == "1"
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    if DEBUG or "pytest" in sys.modules:
+        # Разработка и тесты: случайный ключ на время работы процесса (сессии сбросятся при перезапуске)
+        SECRET_KEY = get_random_secret_key()
+    else:
+        raise ImproperlyConfigured("Не задан SECRET_KEY. Скопируйте .env.example в .env и заполните его.")
 
 # Флаг заезда 2: выполнять расчёт в очереди (RQ + Redis) или синхронно прямо в запросе.
 USE_QUEUE = os.environ.get("USE_QUEUE", "0") == "1"
@@ -38,6 +51,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # отдаёт файл стилей и при DEBUG=0 (в Docker, на gunicorn)
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -84,7 +98,17 @@ if _db_url.startswith("postgres"):
         }
     }
 else:
-    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            # Несколько фоновых задач пишут в SQLite одновременно. IMMEDIATE занимает запись сразу в начале
+            # транзакции, а timeout заставляет другие потоки подождать до 20 с вместо ошибки «database is locked».
+            "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 20},
+            # Тесты тоже на файле, как настоящая БД: общая память SQLite даёт другую ошибку («table is locked»)
+            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
+        }
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -99,6 +123,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]  # здесь лежит общий файл стилей static/css/style.css
 
 # Файлы результатов (большие массивы) — не в БД, а на диске. См. занятие 7.
 MEDIA_URL = "media/"
@@ -108,3 +133,5 @@ MEDIA_ROOT = BASE_DIR / "media"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "task_list"
 LOGOUT_REDIRECT_URL = "login"
+# При DEBUG=0 без collectstatic (например, runserver --insecure или тесты) WhiteNoise ищет файлы в static/ сам
+WHITENOISE_USE_FINDERS = True

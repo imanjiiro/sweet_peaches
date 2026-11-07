@@ -1,98 +1,78 @@
 {% extends "base.html" %}
-{% block h1 %}Задача #{{ task.pk }}: {{ task.name }}{% endblock %}
+{% block title %}Задача №{{ task.pk }} — очередь в приёмном отделении{% endblock %}
+{% block h1 %}Задача №{{ task.pk }}: {{ task.name }}{% endblock %}
 
 {% block content %}
-<p>
-  Статус: <b class="status-{{ task.status }}">{{ task.get_status_display }}</b> 
-  · Параметры: <code>{{ task.params }}</code>
-</p>
+<p>Статус: <span class="badge status-{{ task.status }}" id="status">{{ task.get_status_display }}</span></p>
+
+<div class="panel"><table class="params">
+  <caption>Параметры запуска</caption>
+  <tbody>
+  {% for label, value in params_rows %}
+    <tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
 
 {% if task.status == "failed" %}
-  <p class="card" style="color: red;">Ошибка: {{ task.error }}</p>
+  <p class="card error">Ошибка: {{ task.error }}</p>
 {% endif %}
 
 {% if task.status == "done" %}
-<div class="card p-3 mb-4">
-  <h4 class="mb-3">📊 Результаты симуляции больницы</h4>
-  
   {% if task.result %}
-    <ul class="list-group list-group-flush">
-      <li class="list-group-item bg-transparent">
-        <strong>Среднее время ожидания:</strong> 
-        {{ task.result.average_wait_time }} мин.
-      </li>
-      <li class="list-group-item bg-transparent">
-        <strong>Максимальное время ожидания:</strong> 
-        {{ task.result.max_wait_time }} мин.
-      </li>
-      <li class="list-group-item bg-transparent">
-        <strong>Загрузка врачей:</strong> 
-        {% if task.result.doctor_utilization != None %}
-          {% widthratio task.result.doctor_utilization 1 100 %}%
-        {% else %}
-          —
-        {% endif %}
-      </li>
-      <li class="list-group-item bg-transparent">
-        <strong>Всего обслужено пациентов:</strong> 
-        {{ task.result.served_patients_count }} чел.
-      </li>
-      <li class="list-group-item bg-transparent">
-        <strong>Средняя длина очереди:</strong> 
-        {{ task.result.average_queue_length }} чел.
-      </li>
-    </ul>
-  {% else %}
-    <p class="text-muted">Данные результатов симуляции отсутствуют.</p>
-  {% endif %}
-
-  <div class="mt-3 text-muted">
-    <small>
-      Время расчёта: {{ task.result.elapsed_sec|default:"0.01" }} с | 
-      Версия ядра: {{ task.core_version|default:"1.0.0" }}
-    </small>
+  <div class="stats">
+    <div class="stat"><div class="label">Среднее ожидание</div><div class="value">{{ task.result.average_wait_time|floatformat:2 }}<span class="unit">мин</span></div></div>
+    <div class="stat"><div class="label">Загрузка врачей</div><div class="value">{{ utilization_percent }}<span class="unit">%</span></div></div>
+    <div class="stat"><div class="label">Обслужено</div><div class="value">{{ task.result.served_patients_count }}<span class="unit">чел.</span></div></div>
   </div>
-</div>
+  <div class="panel"><table>
+    <caption>Результат симуляции</caption>
+    <tbody>
+      <tr><th scope="row">Среднее время ожидания</th><td class="num">{{ task.result.average_wait_time|floatformat:2 }} мин</td></tr>
+      <tr><th scope="row">Максимальное время ожидания</th><td class="num">{{ task.result.max_wait_time|floatformat:2 }} мин</td></tr>
+      <tr><th scope="row">Средняя длина очереди</th><td class="num">{{ task.result.average_queue_length|floatformat:2 }} чел.</td></tr>
+      <tr><th scope="row">Загрузка врачей</th><td class="num">{{ utilization_percent }} %</td></tr>
+      <tr><th scope="row">Обслужено пациентов</th><td class="num">{{ task.result.served_patients_count }} чел.</td></tr>
+    </tbody>
+  </table></div>
 
-{% if task.patients.all %}
-<div class="card p-3">
-  <h5 class="mb-3">📋 Журнал пациентов (первые 20)</h5>
-  <table class="table table-sm table-striped">
+  {% if priority_rows %}
+  <div class="panel"><table>
+    <caption>Ожидание по срочности</caption>
     <thead>
-      <tr>
-        <th>№ Пациента</th>
-        <th>Приоритет</th>
-        <th>Время прихода (мин)</th>
-        <th>Начало приёма (мин)</th>
-        <th>Время ожидания (мин)</th>
-      </tr>
+      <tr><th>Срочность</th><th class="num">Пациентов</th><th class="num">Среднее ожидание, мин</th><th class="num">Максимальное ожидание, мин</th></tr>
     </thead>
     <tbody>
-      {% for p in task.patients.all|slice:":20" %}
+    {% for row in priority_rows %}
       <tr>
-        <td>#{{ p.patient_number }}</td>
-        <td>{{ p.priority }}</td>
-        <td>{{ p.arrival_time|floatformat:2 }}</td>
-        <td>{{ p.start_service_time|floatformat:2|default:"—" }}</td>
-        <td>{{ p.wait_time|floatformat:2|default:"0.00" }}</td>
+        <td><span class="prio prio-{{ row.priority }}">{{ row.label }}</span></td>
+        <td class="num">{{ row.count }}</td>
+        <td class="num">{{ row.average_wait_time|floatformat:2 }}</td>
+        <td class="num">{{ row.max_wait_time|floatformat:2 }}</td>
       </tr>
-      {% endfor %}
+    {% endfor %}
     </tbody>
-  </table>
-</div>
-{% endif %}
+  </table></div>
+  <p class="hint">Общее среднее почти не зависит от стратегии: она меняет, кто ждёт дольше, а не сколько ждут все вместе. Сравнивайте стратегии по этой таблице.</p>
+  {% endif %}
 
-{% elif task.status == "queued" or task.status == "running" %}
-<p class="card">Симуляция выполняется… <span id="st"></span></p>
+  <p class="hint">Время расчёта: {{ task.result.elapsed_sec|floatformat:2 }} с · Версия ядра: {{ task.core_version|default:"—" }}</p>
+  {% else %}
+  <p class="card">Данных результата нет.</p>
+  {% endif %}
+
+{% elif task.status == "created" or task.status == "queued" or task.status == "running" %}
+<p class="card">Расчёт выполняется… <span id="st"></span></p>
 <script>
-async function poll(){ 
-  const r = await fetch('/api/tasks/{{ task.pk }}'); 
+const STATUS_RU = {created: "создана", queued: "в очереди", running: "считается", done: "готово", failed: "ошибка"};
+async function poll() {
+  const r = await fetch('/api/tasks/{{ task.pk }}');
   const j = await r.json();
-  document.getElementById('st').textContent = j.status; 
-  if (j.status==='done'||j.status==='failed') location.reload(); 
-  else setTimeout(poll, 1500); 
+  document.getElementById('st').textContent = STATUS_RU[j.status] || j.status;
+  if (j.status === 'done' || j.status === 'failed') location.reload();
+  else setTimeout(poll, 1500);
 }
 poll();
 </script>
 {% endif %}
-{% endblock %} 
+{% endblock %}

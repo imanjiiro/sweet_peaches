@@ -26,9 +26,10 @@ jobs:
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+    - name: Lint with ruff
+      run: ruff check .
+
     - name: Run tests with pytest
       env:
         SECRET_KEY: "ci-secret-key-for-testing"
-        DEBUG: "True"
-      run: |
-        pytest
+      run: pytest -q

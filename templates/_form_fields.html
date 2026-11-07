@@ -1,0 +1,10 @@
+{# Поля формы: подпись над полем, ошибки под полем. Подключается на форме задачи, входе и регистрации. #}
+{% for field in form %}
+<div class="field">
+  {{ field.label_tag }}
+  {{ field }}
+  {% if field.help_text %}<span class="helptext">{{ field.help_text|safe }}</span>{% endif %}
+  {{ field.errors }}
+</div>
+{% endfor %}
+{% if form.non_field_errors %}<p class="error">{{ form.non_field_errors|join:" " }}</p>{% endif %}

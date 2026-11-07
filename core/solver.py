@@ -8,6 +8,7 @@ import heapq
 import itertools
 import random
 import time
+
 from core.schemas import SimulationParams, SimulationResult
 
 VERSION = "1.0.0"  # версия ядра для воспроизводимости расчётов
@@ -42,6 +43,7 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
     doctor_free_times = [0.0] * doctors
     
     wait_times = []
+    waits_by_priority = {1: [], 2: [], 3: []}  # ожидания отдельно по срочности
     queue = []  # Куча ожидающих: (ключ стратегии, порядковый номер, пациент)
     counter = itertools.count()
     
@@ -82,6 +84,7 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
         arr_time = patient["arrival_time"]
         wait_t = max(0.0, current_time - arr_time)
         wait_times.append(wait_t)
+        waits_by_priority[patient.get("priority", 1)].append(wait_t)
 
         serv_t = patient["service_time"]
         total_busy_time += serv_t
@@ -105,10 +108,31 @@ def _run_single_simulation(doctors: int, patients_list: list, strategy: str) -> 
         "doctor_utilization": round(min(1.0, doc_utilization), 2),
         "served_patients_count": served_count,
         "wait_times": [round(w, 2) for w in wait_times],
+        # «Сырые» ожидания по срочности: нужны, чтобы честно усреднять по прогонам (см. _summarize_priorities)
+        "_waits_by_priority": waits_by_priority,
     }
 
 
-def generate_stochastic_patients(arrival_rate: float, service_mean: float, horizon_min: float, seed: int = None) -> list:
+def _summarize_priorities(runs: list[dict]) -> list[dict]:
+    """
+    Среднее и максимум ожидания отдельно для срочности 1, 2, 3 по одному или нескольким прогонам.
+    Среднее считаем по всем пациентам срочности сразу (сумма / число), а не как среднее из средних.
+    """
+    rows = []
+    for prio in (1, 2, 3):
+        waits = [w for r in runs for w in r["_waits_by_priority"][prio]]
+        rows.append({
+            "priority": prio,
+            "count": round(len(waits) / len(runs)) if runs else 0,
+            "average_wait_time": round(sum(waits) / len(waits), 2) if waits else 0.0,
+            "max_wait_time": round(max(waits), 2) if waits else 0.0,
+        })
+    return rows
+
+
+def generate_stochastic_patients(
+    arrival_rate: float, service_mean: float, horizon_min: float, seed: int | None = None
+) -> list:
     """Генерация случайного потока пациентов (Пуассоновский процесс приходов + экспоненциальное время обслуживания)."""
     # Свой генератор на каждый вызов: параллельные задачи не портят друг другу числа,
     # а тот же seed всегда даёт тот же поток пациентов (глобальный random.seed этого не гарантирует).
@@ -157,6 +181,7 @@ def run(params: dict) -> dict:
         # Детерминированный режим (для эталонных тестов)
         patients_list = [pat.model_dump() for pat in p.patients]
         res_dict = _run_single_simulation(p.doctors, patients_list, p.strategy)
+        res_dict["wait_by_priority"] = _summarize_priorities([res_dict])
     else:
         # Стохастический режим (случайная генерация)
         runs_results = []
@@ -181,6 +206,7 @@ def run(params: dict) -> dict:
                 "average_queue_length": 0.0,
                 "doctor_utilization": 0.0,
                 "served_patients_count": 0,
+                "wait_by_priority": _summarize_priorities([]),
                 "wait_times": []
             }
         else:
@@ -188,9 +214,12 @@ def run(params: dict) -> dict:
             res_dict = {
                 "average_wait_time": round(sum(r["average_wait_time"] for r in runs_results) / len(runs_results), 2),
                 "max_wait_time": round(max(r["max_wait_time"] for r in runs_results), 2),
-                "average_queue_length": round(sum(r["average_queue_length"] for r in runs_results) / len(runs_results), 2),
+                "average_queue_length": round(
+                    sum(r["average_queue_length"] for r in runs_results) / len(runs_results), 2
+                ),
                 "doctor_utilization": round(sum(r["doctor_utilization"] for r in runs_results) / len(runs_results), 2),
                 "served_patients_count": int(sum(r["served_patients_count"] for r in runs_results) / len(runs_results)),
+                "wait_by_priority": _summarize_priorities(runs_results),
                 "wait_times": runs_results[0]["wait_times"],  # Задержки первого прогона для наглядности
             }
 
@@ -202,6 +231,7 @@ def run(params: dict) -> dict:
         average_queue_length=res_dict["average_queue_length"],
         doctor_utilization=res_dict["doctor_utilization"],
         served_patients_count=res_dict["served_patients_count"],
+        wait_by_priority=res_dict["wait_by_priority"],
         wait_times=res_dict["wait_times"],
         core_version=VERSION
     )
